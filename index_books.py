@@ -17,7 +17,7 @@ import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 try:
     from pypdf import PdfReader
@@ -417,6 +417,43 @@ def write_markdown(records: Sequence[BookRecord], markdown_path: Path) -> None:
     markdown_path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def write_low_confidence_csv(
+    records: Sequence[BookRecord],
+    min_confidence: float,
+    report_path: Path,
+) -> int:
+    flagged = [record for record in records if record.confidence < min_confidence]
+    flagged = sorted(flagged, key=lambda rec: (rec.confidence, rec.category, rec.title.lower()))
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with report_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "confidence_threshold",
+                "category",
+                "confidence",
+                "title",
+                "filename",
+                "absolute_path",
+                "matched_keywords",
+            ]
+        )
+        for record in flagged:
+            writer.writerow(
+                [
+                    f"{min_confidence:.3f}",
+                    record.category,
+                    f"{record.confidence:.3f}",
+                    record.title,
+                    record.filename,
+                    record.absolute_path,
+                    "; ".join(record.matched_keywords),
+                ]
+            )
+    return len(flagged)
+
+
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Categorize technical PDF books.")
     parser.add_argument(
@@ -443,6 +480,18 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=12,
         help="Per-file extraction timeout in seconds (default: 12).",
     )
+    parser.add_argument(
+        "--min-confidence",
+        type=float,
+        default=None,
+        help="If set, write a review CSV with items below this confidence.",
+    )
+    parser.add_argument(
+        "--low-confidence-report",
+        type=Path,
+        default=None,
+        help="Optional custom path for low-confidence review CSV.",
+    )
     return parser.parse_args(argv)
 
 
@@ -452,6 +501,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     output_dir: Path = args.output_dir
     max_pages: int = max(1, args.max_pages)
     extract_timeout: int = max(2, args.extract_timeout)
+    min_confidence: Optional[float] = args.min_confidence
+    low_confidence_report: Optional[Path] = args.low_confidence_report
 
     if not source_dir.exists() or not source_dir.is_dir():
         print(f"Source directory not found: {source_dir}", file=sys.stderr)
@@ -474,6 +525,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     write_csv(records, csv_path)
     write_markdown(records, md_path)
+
+    if min_confidence is not None:
+        threshold = min(max(min_confidence, 0.0), 1.0)
+        report_path = low_confidence_report or (output_dir / "low_confidence_review.csv")
+        flagged_count = write_low_confidence_csv(records, threshold, report_path)
+        print(
+            f"Wrote low-confidence review CSV: {report_path.resolve()} "
+            f"({flagged_count} records below {threshold:.3f})"
+        )
 
     print(f"Scanned {len(pdf_files)} PDFs from: {source_dir}")
     print(f"Wrote CSV: {csv_path.resolve()}")
