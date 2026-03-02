@@ -24,16 +24,36 @@ python3 -m pip install -r requirements.txt
 ## Run
 
 ```bash
-python3 index_books.py \
+.venv/bin/python index_books.py \
   --source "/Users/longtran/Documents/E-Books" \
   --output-dir "./output" \
-  --max-pages 8
+  --max-pages 8 \
+  --extract-timeout 12
+```
+
+Generate a review file for uncertain classifications:
+
+```bash
+.venv/bin/python index_books.py \
+  --source "/Users/longtran/Documents/E-Books" \
+  --output-dir "./output" \
+  --min-confidence 0.35
 ```
 
 ## Output schema
 
 CSV columns:
 
+- `category`
+- `confidence`
+- `title`
+- `filename`
+- `absolute_path`
+- `matched_keywords`
+
+Low-confidence review CSV (`output/low_confidence_review.csv`) columns:
+
+- `confidence_threshold`
 - `category`
 - `confidence`
 - `title`
