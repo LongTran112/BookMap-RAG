@@ -202,6 +202,14 @@ For local generator mode (`llama.cpp`):
 - Set model path in the Ask page and switch to `Answer mode = llama.cpp`.
 - If citations are invalid or runtime fails, dashboard falls back to deterministic grounded output.
 
+For local generator mode (`ollama` + `qwen3.5:9b`):
+
+- Install and start Ollama locally.
+- Pull a model once: `ollama pull qwen3.5:9b`.
+- Verify runtime: `ollama run qwen3.5:9b "hi there"`.
+- In Ask Books, set `Answer mode = ollama`, keep base URL `http://127.0.0.1:11434`, and set model tag `qwen3.5:9b`.
+- If output quality is weak, reduce temperature and increase context window.
+
 ## Launch RAG API (FastAPI)
 
 This API is optional. Use it when you need programmatic access from external apps or you want to compare API parity with Streamlit Ask Books.
@@ -297,5 +305,6 @@ For large libraries, keep the graph responsive with:
 - **Dashboard cannot load index**: rerun indexing and semantic build commands, then verify files in `output/semantic_index/`.
 - **Ask Books (RAG) cannot load**: build chunk index and verify files in `output/semantic_index_chunks/`.
 - **llama.cpp mode falls back to deterministic**: verify `llama-cpp-python` is installed, model path exists, and answer includes citation markers like `[C1]`.
+- **ollama mode fails**: confirm `ollama run qwen3.5:9b "hi"` works first, then verify base URL/model tag in the Ask Books page.
 - **Relationship graph is dense/slow**: reduce max nodes, increase min edge similarity, or lower neighbors per node.
 - **No relevant results**: lower the similarity threshold in the dashboard sidebar.

@@ -38,7 +38,7 @@ except ImportError:  # pragma: no cover - optional runtime dependency
 
 from semantic_books.learning_mode import learning_mode_labels
 from semantic_books.daily_recommend import DailyBookRecommender, DailyRecommendationWeights
-from semantic_books.rag_config import LlamaCppConfig, RetrievalConfig
+from semantic_books.rag_config import LlamaCppConfig, OllamaConfig, RetrievalConfig
 from semantic_books.rag_service import RagFilters, RagService
 from semantic_books.search_service import SearchFilters, SemanticSearchService
 
@@ -1118,6 +1118,12 @@ def _build_rag_answer_payload(
     llama_top_p: float,
     llama_threads: int,
     llama_gpu_layers: int,
+    ollama_base_url: str,
+    ollama_model: str,
+    ollama_temp: float,
+    ollama_top_p: float,
+    ollama_num_ctx: int,
+    ollama_timeout_sec: int,
 ) -> Dict[str, Any]:
     return {
         "query": query.strip(),
@@ -1147,6 +1153,15 @@ def _build_rag_answer_payload(
             "top_p": float(llama_top_p),
             "n_threads": int(llama_threads),
             "n_gpu_layers": int(llama_gpu_layers),
+        },
+        "ollama": {
+            "enabled": generation_mode == "ollama",
+            "base_url": str(ollama_base_url).strip(),
+            "model": str(ollama_model).strip(),
+            "temperature": float(ollama_temp),
+            "top_p": float(ollama_top_p),
+            "num_ctx": int(ollama_num_ctx),
+            "timeout_sec": int(ollama_timeout_sec),
         },
     }
 
@@ -1363,7 +1378,7 @@ def render_ask_books_rag_page(
     st.subheader("Generation")
     generation_mode = st.radio(
         "Answer mode",
-        ["deterministic", "llama.cpp"],
+        ["deterministic", "llama.cpp", "ollama"],
         horizontal=True,
         key="rag-generation-mode",
     )
@@ -1427,6 +1442,54 @@ def render_ask_books_rag_page(
         key="rag-llama-gpu-layers",
         disabled=generation_mode != "llama.cpp",
     )
+    ollama_base_url = st.text_input(
+        "Ollama base URL",
+        value="http://127.0.0.1:11434",
+        key="rag-ollama-base-url",
+        disabled=generation_mode != "ollama",
+    )
+    ollama_model = st.text_input(
+        "Ollama model tag",
+        value="qwen3.5:9b",
+        key="rag-ollama-model",
+        disabled=generation_mode != "ollama",
+    )
+    ollama_num_ctx = st.slider(
+        "Ollama context window",
+        min_value=512,
+        max_value=32768,
+        value=8192,
+        step=256,
+        key="rag-ollama-num-ctx",
+        disabled=generation_mode != "ollama",
+    )
+    ollama_temp = st.slider(
+        "Ollama temperature",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.2,
+        step=0.05,
+        key="rag-ollama-temp",
+        disabled=generation_mode != "ollama",
+    )
+    ollama_top_p = st.slider(
+        "Ollama top_p",
+        min_value=0.1,
+        max_value=1.0,
+        value=0.9,
+        step=0.05,
+        key="rag-ollama-top-p",
+        disabled=generation_mode != "ollama",
+    )
+    ollama_timeout_sec = st.slider(
+        "Ollama timeout (seconds)",
+        min_value=5,
+        max_value=180,
+        value=45,
+        step=5,
+        key="rag-ollama-timeout",
+        disabled=generation_mode != "ollama",
+    )
 
     st.sidebar.header("Ask Books Filters")
     selected_categories = st.sidebar.multiselect("Category", all_categories, default=all_categories, key="rag-category")
@@ -1476,6 +1539,12 @@ def render_ask_books_rag_page(
         llama_top_p=float(llama_top_p),
         llama_threads=int(llama_threads),
         llama_gpu_layers=int(llama_gpu_layers),
+        ollama_base_url=str(ollama_base_url),
+        ollama_model=str(ollama_model),
+        ollama_temp=float(ollama_temp),
+        ollama_top_p=float(ollama_top_p),
+        ollama_num_ctx=int(ollama_num_ctx),
+        ollama_timeout_sec=int(ollama_timeout_sec),
     )
 
     with st.spinner("Generating grounded answer..."):
@@ -1512,6 +1581,15 @@ def render_ask_books_rag_page(
                     n_threads=int(llama_threads),
                     n_gpu_layers=int(llama_gpu_layers),
                 )
+                ollama_config = OllamaConfig(
+                    enabled=generation_mode == "ollama",
+                    base_url=str(ollama_base_url).strip(),
+                    model=str(ollama_model).strip(),
+                    temperature=float(ollama_temp),
+                    top_p=float(ollama_top_p),
+                    num_ctx=int(ollama_num_ctx),
+                    timeout_sec=int(ollama_timeout_sec),
+                )
                 response = rag_service.answer_question(
                     query=query,
                     filters=filters,
@@ -1519,6 +1597,7 @@ def render_ask_books_rag_page(
                     max_citations=int(max_citations),
                     retrieval_config=retrieval_config,
                     llm_config=llm_config,
+                    ollama_config=ollama_config,
                 )
         except Exception as exc:
             st.error(f"Could not generate answer: {exc}")

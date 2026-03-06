@@ -7,7 +7,7 @@ from unittest.mock import patch
 import numpy as np
 
 from semantic_books.generation_service import GenerationResult
-from semantic_books.rag_config import LlamaCppConfig, RetrievalConfig
+from semantic_books.rag_config import LlamaCppConfig, OllamaConfig, RetrievalConfig
 from semantic_books.rag_service import RagFilters, RagService
 
 
@@ -175,6 +175,35 @@ class RagServiceTests(unittest.TestCase):
                 llm_config=LlamaCppConfig(enabled=True, model_path="/tmp/model.gguf"),
             )
             self.assertEqual(response["generation_mode"], "llama.cpp")
+            self.assertIn("[C1]", response["answer"])
+            self.assertFalse(response["fallback_reason"])
+
+    @patch("semantic_books.rag_service.SentenceTransformer", return_value=_FakeModel())
+    @patch("semantic_books.rag_service.create_generator")
+    def test_generation_uses_ollama_when_valid(
+        self,
+        mock_create_generator,
+        _mock_model,
+    ) -> None:
+        class _OllamaGenerator:
+            def generate(self, _prompt: str) -> GenerationResult:
+                return GenerationResult(
+                    text="Answer: Use regularization and validation checks [C1].\nSourcesUsed: C1",
+                    backend="ollama",
+                )
+
+        mock_create_generator.return_value = _OllamaGenerator()
+        with TemporaryDirectory() as tmp_dir:
+            index_dir = _write_chunk_index(Path(tmp_dir))
+            service = RagService(index_dir)
+            response = service.answer_question(
+                query="Give me deep learning theory foundations",
+                filters=RagFilters(categories=["DeepLearning"]),
+                retrieval_config=RetrievalConfig(final_top_k=4),
+                llm_config=LlamaCppConfig(enabled=False),
+                ollama_config=OllamaConfig(enabled=True, model="qwen3.5:9b"),
+            )
+            self.assertEqual(response["generation_mode"], "ollama")
             self.assertIn("[C1]", response["answer"])
             self.assertFalse(response["fallback_reason"])
 

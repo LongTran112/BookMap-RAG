@@ -36,3 +36,20 @@ class LlamaCppConfig:
         if not self.model_path.strip() or not candidate.exists():
             return None
         return candidate
+
+
+@dataclass
+class OllamaConfig:
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:11434"
+    model: str = "qwen3.5:9b"
+    temperature: float = 0.2
+    top_p: float = 0.9
+    num_ctx: int = 8192
+    timeout_sec: int = 45
+
+    def resolved_base_url(self) -> str:
+        value = str(self.base_url or "").strip().rstrip("/")
+        if not value:
+            return "http://127.0.0.1:11434"
+        return value
