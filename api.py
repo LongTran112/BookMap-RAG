@@ -16,7 +16,7 @@ from semantic_books.langchain_adapter import (
     build_context_from_documents,
     build_lc_answer_chain,
 )
-from semantic_books.rag_config import LlamaCppConfig, RetrievalConfig
+from semantic_books.rag_config import LlamaCppConfig, OllamaConfig, RetrievalConfig
 from semantic_books.rag_service import RagFilters, RagService
 
 
@@ -58,6 +58,16 @@ class LlamaCppConfigPayload(BaseModel):
     seed: int = 42
 
 
+class OllamaConfigPayload(BaseModel):
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:11434"
+    model: str = "qwen3.5:9b"
+    temperature: float = 0.2
+    top_p: float = 0.9
+    num_ctx: int = 8192
+    timeout_sec: int = 45
+
+
 class RagRequest(BaseModel):
     query: str = Field(min_length=1)
     top_k: int = Field(default=8, ge=1)
@@ -65,6 +75,7 @@ class RagRequest(BaseModel):
     filters: RagFiltersPayload = Field(default_factory=RagFiltersPayload)
     retrieval: RetrievalConfigPayload = Field(default_factory=RetrievalConfigPayload)
     llm: LlamaCppConfigPayload = Field(default_factory=LlamaCppConfigPayload)
+    ollama: OllamaConfigPayload = Field(default_factory=OllamaConfigPayload)
 
 
 class HealthResponse(BaseModel):
@@ -169,6 +180,18 @@ def _build_llm_config(payload: LlamaCppConfigPayload) -> LlamaCppConfig:
     )
 
 
+def _build_ollama_config(payload: OllamaConfigPayload) -> OllamaConfig:
+    return OllamaConfig(
+        enabled=bool(payload.enabled),
+        base_url=str(payload.base_url).strip(),
+        model=str(payload.model).strip(),
+        temperature=float(payload.temperature),
+        top_p=float(payload.top_p),
+        num_ctx=int(payload.num_ctx),
+        timeout_sec=int(payload.timeout_sec),
+    )
+
+
 app = FastAPI(title="EBooksSorter RAG API", version="0.1.0")
 
 
@@ -211,6 +234,7 @@ def rag_answer(request: RagRequest) -> AnswerResponse:
         filters = _build_filters(request.filters)
         retrieval = _build_retrieval_config(request.retrieval, request.top_k)
         llm = _build_llm_config(request.llm)
+        ollama = _build_ollama_config(request.ollama)
         response = rag_service.answer_question(
             query=request.query.strip(),
             filters=filters,
@@ -218,6 +242,7 @@ def rag_answer(request: RagRequest) -> AnswerResponse:
             max_citations=int(request.max_citations),
             retrieval_config=retrieval,
             llm_config=llm,
+            ollama_config=ollama,
         )
     except HTTPException:
         raise
@@ -233,6 +258,7 @@ def rag_answer_langchain(request: RagRequest) -> AnswerResponse:
         filters = _build_filters(request.filters)
         retrieval = _build_retrieval_config(request.retrieval, request.top_k)
         llm = _build_llm_config(request.llm)
+        ollama = _build_ollama_config(request.ollama)
 
         retriever = RagServiceRetriever(
             rag_service=rag_service,
@@ -249,6 +275,7 @@ def rag_answer_langchain(request: RagRequest) -> AnswerResponse:
                 max_citations=int(request.max_citations),
                 retrieval_config=retrieval,
                 llm_config=llm,
+                ollama_config=ollama,
             )
             fallback["fallback_reason"] = "LangChain retriever returned no documents."
             return AnswerResponse(**fallback)
@@ -263,6 +290,7 @@ def rag_answer_langchain(request: RagRequest) -> AnswerResponse:
                 max_citations=int(request.max_citations),
                 retrieval_config=retrieval,
                 llm_config=llm,
+                ollama_config=ollama,
             )
             fallback["fallback_reason"] = "LangChain chain unavailable; used canonical RAG answer."
             return AnswerResponse(**fallback)
@@ -277,6 +305,7 @@ def rag_answer_langchain(request: RagRequest) -> AnswerResponse:
                 max_citations=int(request.max_citations),
                 retrieval_config=retrieval,
                 llm_config=llm,
+                ollama_config=ollama,
             )
             fallback["fallback_reason"] = "LangChain output missing valid citation markers."
             return AnswerResponse(**fallback)

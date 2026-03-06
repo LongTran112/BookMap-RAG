@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+import json
+import re
 from typing import Optional, Protocol
+import urllib.error
+import urllib.request
 
-from semantic_books.rag_config import LlamaCppConfig
+from semantic_books.rag_config import LlamaCppConfig, OllamaConfig
 
 try:
     from llama_cpp import Llama
@@ -15,7 +18,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 
 class GeneratorBackend(Protocol):
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str) -> "GenerationResult":
         """Generate plain text from prompt."""
 
 
@@ -81,7 +84,67 @@ class LlamaCppGenerator:
             return GenerationResult(text="", backend="llama.cpp", error=f"Generation failed: {exc}")
 
 
-def create_generator(cfg: LlamaCppConfig) -> Optional[GeneratorBackend]:
-    if not cfg.enabled:
-        return None
-    return LlamaCppGenerator(cfg)
+class OllamaGenerator:
+    """Ollama text generation wrapper."""
+
+    def __init__(self, cfg: OllamaConfig) -> None:
+        self.cfg = cfg
+
+    @staticmethod
+    def _strip_thinking_sections(text: str) -> str:
+        patterns = [
+            r"(?is)^\s*thinking\.\.\..*?done thinking\.\s*",
+            r"(?is)^\s*thinking process:.*?(?:final output generation:|final output:)\s*",
+            r"(?is)<think>.*?</think>",
+        ]
+        clean = text
+        for pattern in patterns:
+            clean = re.sub(pattern, "", clean).strip()
+        return clean
+
+    def generate(self, prompt: str) -> GenerationResult:
+        payload = {
+            "model": str(self.cfg.model).strip(),
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": max(0.0, float(self.cfg.temperature)),
+                "top_p": max(0.0, min(1.0, float(self.cfg.top_p))),
+                "num_ctx": max(512, int(self.cfg.num_ctx)),
+            },
+        }
+        if not payload["model"]:
+            return GenerationResult(text="", backend="ollama", error="Ollama model is empty.")
+        request = urllib.request.Request(
+            url=f"{self.cfg.resolved_base_url()}/api/generate",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=max(3, int(self.cfg.timeout_sec))) as response:
+                body = response.read().decode("utf-8", errors="replace")
+            data = json.loads(body) if body.strip() else {}
+            if not isinstance(data, dict):
+                return GenerationResult(text="", backend="ollama", error="Invalid Ollama response format.")
+            raw_text = str(data.get("response", "") or "").strip()
+            text = self._strip_thinking_sections(raw_text)
+            return GenerationResult(text=text, backend="ollama")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            return GenerationResult(text="", backend="ollama", error=f"Ollama HTTP {exc.code}: {detail}")
+        except urllib.error.URLError as exc:
+            return GenerationResult(text="", backend="ollama", error=f"Ollama connection failed: {exc}")
+        except Exception as exc:  # pragma: no cover - runtime specific
+            return GenerationResult(text="", backend="ollama", error=f"Ollama generation failed: {exc}")
+
+
+def create_generator(
+    llama_cfg: Optional[LlamaCppConfig] = None,
+    ollama_cfg: Optional[OllamaConfig] = None,
+) -> Optional[GeneratorBackend]:
+    if ollama_cfg is not None and bool(ollama_cfg.enabled):
+        return OllamaGenerator(ollama_cfg)
+    if llama_cfg is not None and bool(llama_cfg.enabled):
+        return LlamaCppGenerator(llama_cfg)
+    return None

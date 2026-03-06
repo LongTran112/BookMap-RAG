@@ -125,6 +125,30 @@ class RagApiTests(unittest.TestCase):
         self.assertTrue(payload["follow_ups"])
         self.assertEqual(payload["generation_mode"], "deterministic")
         self.assertFalse(fake.last_answer_kwargs["llm_config"].enabled)
+        self.assertFalse(fake.last_answer_kwargs["ollama_config"].enabled)
+
+    @patch("api.get_rag_service")
+    def test_answer_endpoint_accepts_ollama_config(self, mock_get_service) -> None:
+        fake = _FakeRagService()
+        mock_get_service.return_value = fake
+        response = self.client.post(
+            "/rag/answer",
+            json={
+                "query": "deep learning foundations",
+                "ollama": {
+                    "enabled": True,
+                    "base_url": "http://127.0.0.1:11434",
+                    "model": "qwen3.5:9b",
+                    "temperature": 0.1,
+                    "top_p": 0.8,
+                    "num_ctx": 4096,
+                    "timeout_sec": 30,
+                },
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(fake.last_answer_kwargs["ollama_config"].enabled)
+        self.assertEqual(fake.last_answer_kwargs["ollama_config"].model, "qwen3.5:9b")
 
     def test_invalid_payload_returns_422(self) -> None:
         response = self.client.post("/rag/answer", json={"query": "", "top_k": 0})
