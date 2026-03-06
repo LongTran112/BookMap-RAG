@@ -26,7 +26,7 @@ except ImportError:  # pragma: no cover - optional dependency in some test envir
     CrossEncoder = None  # type: ignore[assignment]
 
 from semantic_books.generation_service import create_generator
-from semantic_books.rag_config import LlamaCppConfig, RetrievalConfig
+from semantic_books.rag_config import LlamaCppConfig, OllamaConfig, RetrievalConfig
 
 
 @dataclass
@@ -347,6 +347,7 @@ class RagService:
         max_citations: int = 6,
         retrieval_config: Optional[RetrievalConfig] = None,
         llm_config: Optional[LlamaCppConfig] = None,
+        ollama_config: Optional[OllamaConfig] = None,
     ) -> Dict[str, Any]:
         cfg = retrieval_config or RetrievalConfig(final_top_k=max(1, int(top_k)))
         chunks = self.retrieve_chunks(query=query, filters=filters, top_k=top_k, retrieval_config=cfg)
@@ -375,11 +376,12 @@ class RagService:
         generated_answer = ""
         generation_mode = "deterministic"
         generation_cfg = llm_config or LlamaCppConfig()
-        if generation_cfg.enabled:
+        ollama_cfg = ollama_config or OllamaConfig()
+        if generation_cfg.enabled or ollama_cfg.enabled:
             prompt = self._build_generation_prompt(query=query, citations=citations)
-            generator = create_generator(generation_cfg)
+            generator = create_generator(llama_cfg=generation_cfg, ollama_cfg=ollama_cfg)
             if generator is None:
-                fallback_reason = "llama.cpp disabled or unavailable."
+                fallback_reason = "No generation backend enabled or available."
             else:
                 result = generator.generate(prompt)
                 known_citations = {str(item["citation_id"]) for item in citations}
@@ -389,7 +391,7 @@ class RagService:
                     fallback_reason = "Generated answer missing valid citation markers."
                 else:
                     generated_answer = result.text.strip()
-                    generation_mode = "llama.cpp"
+                    generation_mode = str(result.backend or "deterministic")
 
         if not generated_answer:
             generated_answer = self._deterministic_answer(chunks, citations)
