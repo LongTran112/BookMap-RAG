@@ -223,6 +223,37 @@ class RagServiceTests(unittest.TestCase):
             self.assertIn("[C1]", response["answer"])
             self.assertFalse(response["fallback_reason"])
 
+    @patch("semantic_books.rag_service.SentenceTransformer", return_value=_FakeModel())
+    @patch("semantic_books.rag_service.create_generator")
+    def test_generation_accepts_sources_used_without_inline_markers(
+        self,
+        mock_create_generator,
+        _mock_model,
+    ) -> None:
+        class _SourcesUsedOnlyGenerator:
+            def generate(self, _prompt: str) -> GenerationResult:
+                return GenerationResult(
+                    text=(
+                        "Answer: Deep learning uses layered representations for pattern discovery.\n"
+                        "SourcesUsed: C1"
+                    ),
+                    backend="ollama",
+                )
+
+        mock_create_generator.return_value = _SourcesUsedOnlyGenerator()
+        with TemporaryDirectory() as tmp_dir:
+            index_dir = _write_chunk_index(Path(tmp_dir))
+            service = RagService(index_dir)
+            response = service.answer_question(
+                query="Give me deep learning theory foundations",
+                filters=RagFilters(categories=["DeepLearning"]),
+                retrieval_config=RetrievalConfig(final_top_k=4),
+                llm_config=LlamaCppConfig(enabled=False),
+                ollama_config=OllamaConfig(enabled=True, model="deepseek-r1-local:latest"),
+            )
+            self.assertEqual(response["generation_mode"], "ollama")
+            self.assertFalse(response["fallback_reason"])
+
 
 if __name__ == "__main__":
     unittest.main()
