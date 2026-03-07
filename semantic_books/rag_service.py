@@ -323,30 +323,33 @@ class RagService:
         context = "\n".join(context_lines)
         if RagService._is_definition_query(query):
             return (
-                "You answer questions using only provided context.\n"
+                "You are a technical reference and advisor.\n"
+                "Answer questions using only provided context.\n"
                 "Rules:\n"
-                "1) Return exactly 3 bullet points.\n"
-                "2) Bullet 1: formal definition or formula.\n"
-                "3) Bullet 2: plain-language intuition.\n"
-                "4) Bullet 3: one practical use-case.\n"
-                "5) Cite each bullet with markers like [C1], [C2].\n"
-                "6) Do not invent sources.\n"
+                "1) Do not force a fixed number of bullets.\n"
+                "2) If the user explicitly requests bullets/count, follow that format exactly.\n"
+                "3) For definition-style queries, cover: formal definition, plain-language intuition, and practical use-case.\n"
+                "4) Cite every substantive claim with markers like [C1], [C2].\n"
+                "5) Do not invent sources.\n"
+                "6) Do not include internal reasoning traces; return only the final answer.\n"
                 "7) If context is insufficient for a direct definition, output:\n"
                 "   'Insufficient grounded definition in provided sources.' and then 2 cited snippets.\n\n"
                 f"Question: {query.strip()}\n\n"
                 f"Context:\n{context}\n\n"
                 "Return format:\n"
-                "Answer: <exactly 3 bullet points, each with citations>\n"
+                "Answer: <grounded response in best-fit format with citations>\n"
                 "SourcesUsed: <comma-separated citation ids>\n"
             )
         return (
-            "You answer questions using only provided context.\n"
+            "You are a technical reference and advisor.\n"
+            "Answer questions using only provided context.\n"
             "Rules:\n"
             "1) Be concise and factual.\n"
             "2) Cite claims with markers like [C1], [C2].\n"
             "3) Do not invent sources.\n\n"
             "4) Prefer citations that match the question domain. Avoid tangential domains unless explicitly asked.\n"
             "5) If asked for bullets, return exactly the requested number of bullets.\n\n"
+            "6) Do not include internal reasoning traces; return only the final answer.\n\n"
             f"Question: {query.strip()}\n\n"
             f"Context:\n{context}\n\n"
             "Return format:\n"
@@ -358,10 +361,19 @@ class RagService:
     def _validate_generated_answer(text: str, known_citations: Set[str]) -> bool:
         if not text.strip():
             return False
-        found = set(re.findall(r"\[(C\d+)\]", text))
-        if not found:
+        inline_found = set(re.findall(r"\[(C\d+)\]", text))
+        if inline_found:
+            return inline_found.issubset(known_citations)
+
+        # Be tolerant of models that only provide citation ids in SourcesUsed.
+        sources_used_found: Set[str] = set()
+        for match in re.finditer(r"^\s*SourcesUsed\s*:\s*(.+)$", text, flags=re.IGNORECASE | re.MULTILINE):
+            tail = str(match.group(1) or "")
+            sources_used_found.update(re.findall(r"\b(C\d+)\b", tail))
+
+        if not sources_used_found:
             return False
-        return found.issubset(known_citations)
+        return sources_used_found.issubset(known_citations)
 
     @staticmethod
     def _deterministic_answer(chunks: List[Dict[str, Any]], citations: List[Dict[str, Any]]) -> str:

@@ -101,15 +101,60 @@ class OllamaGenerator:
         self.cfg = cfg
 
     @staticmethod
+    def _dedupe_repeated_paragraphs(text: str) -> str:
+        paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()]
+        if len(paragraphs) <= 1:
+            return text.strip()
+        seen = set()
+        keep = []
+        for paragraph in paragraphs:
+            key = re.sub(r"\s+", " ", paragraph).strip().lower()
+            # Keep short lines even if repeated; dedupe only long repeated blocks.
+            if len(key) >= 80:
+                if key in seen:
+                    continue
+                seen.add(key)
+            keep.append(paragraph)
+        return "\n\n".join(keep).strip()
+
+    @staticmethod
+    def _drop_reasoning_paragraphs(text: str) -> str:
+        reasoning_markers = [
+            r"\bso,\s*i need to\b",
+            r"\blet me (?:go through|start by)\b",
+            r"\bfirst,\s*i should\b",
+            r"\blooking at \[c\d+\]\b",
+            r"\bbut the user wants\b",
+            r"\bi think the answer should\b",
+            r"\bthe answer would be\b",
+        ]
+        marker_re = re.compile("|".join(reasoning_markers), flags=re.IGNORECASE)
+        paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()]
+        filtered = [part for part in paragraphs if not marker_re.search(part)]
+        return "\n\n".join(filtered).strip()
+
+    @staticmethod
     def _strip_thinking_sections(text: str) -> str:
         patterns = [
             r"(?is)^\s*thinking\.\.\..*?done thinking\.\s*",
             r"(?is)^\s*thinking process:.*?(?:final output generation:|final output:)\s*",
             r"(?is)<think>.*?</think>",
+            r"(?im)^\s*generating grounded answer\.\.\.\s*$",
         ]
         clean = text
         for pattern in patterns:
             clean = re.sub(pattern, "", clean).strip()
+        # If model leaked internal planning, keep only the final answer section when possible.
+        if re.search(r"(?i)\bso,\s*i need to\b|\bbut the user wants\b|\blet me go through\b", clean):
+            final_match = re.search(
+                r"(?im)^\s*(answer\s*:|formal definition:|plain-language intuition:|practical use-case:)",
+                clean,
+            )
+            if final_match is not None:
+                clean = clean[final_match.start() :].strip()
+            else:
+                clean = OllamaGenerator._drop_reasoning_paragraphs(clean)
+        clean = OllamaGenerator._dedupe_repeated_paragraphs(clean)
         return clean
 
     def generate(
