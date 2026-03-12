@@ -1,4 +1,4 @@
-"""Django REST views that mirror the previous FastAPI RAG contract."""
+"""Django REST views for the RAG API contract."""
 
 from __future__ import annotations
 

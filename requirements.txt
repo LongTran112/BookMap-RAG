@@ -8,7 +8,6 @@ ebooklib
 beautifulsoup4
 plotly
 llama-cpp-python
-fastapi
 uvicorn[standard]
 pydantic
 langchain
