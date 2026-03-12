@@ -7,7 +7,9 @@ pypdfium2
 ebooklib
 beautifulsoup4
 plotly
-fastapi
+django
+djangorestframework
+drf-spectacular
 uvicorn[standard]
 pydantic
 langchain

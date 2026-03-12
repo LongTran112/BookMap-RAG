@@ -2,10 +2,7 @@
 
 Technical PDF/EPUB library explorer with grounded RAG Q&A.
 
-<video width="100%" autoplay loop muted playsinline>
-  <source src="./assets/demo.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+[![Demo Preview](./assets/demo-preview.gif)](./assets/demo.mp4)
 
 ## What it does
 
@@ -231,7 +228,7 @@ Dashboard features:
 - Daily Recommendations page
 - Relationship Graph page (Obsidian-style) with whole-library and focused graph modes
 
-Streamlit is the primary frontend for this project. FastAPI endpoints are optional and mainly for external integrations/parity checks.
+Streamlit is the primary frontend for this project. Django API endpoints are optional and mainly for external integrations/parity checks.
 
 ### Ask Books (RAG) Current Controls
 
@@ -240,7 +237,7 @@ The `Ask Books (RAG)` page includes:
 - Streamlit chat-style interaction with persistent session history.
 - Retrieval presets: `Definition Q&A`, `Concept Compare`, `Learning Path`.
 - Performance profiles: `Auto`, `Fast`, `Balanced`, `Quality`.
-- Execution path switch: direct local RagService or FastAPI `/rag/answer`.
+- Execution path switch: direct local RagService or Django `/rag/answer`.
 - Hybrid retrieval (`dense + lexical`) tuning + reranker controls.
 - Generation backends: `deterministic`, `llama.cpp`, `ollama`.
 - Meta-text controls:
@@ -272,11 +269,11 @@ For local generator mode (`ollama` + `granite3.3:8b`):
 - In Ask Books, keep base URL `http://127.0.0.1:11434`, `Answer mode = ollama`, and model tag `granite3.3:8b`.
 - If output quality is weak, reduce temperature and increase context window.
 
-## Launch RAG API (FastAPI)
+## Launch RAG API (Django + DRF)
 
 This API is optional. Use it when you need programmatic access from external apps or you want to compare API parity with Streamlit Ask Books.
 
-Install dependencies first (includes FastAPI + LangChain):
+Install dependencies first (includes Django, DRF, and LangChain):
 
 ```bash
 python3 -m pip install -r requirements.txt
@@ -289,7 +286,13 @@ export RAG_API_KEY="change-this-internal-key"
 # Optional internal guardrail tuning
 export RAG_RATE_LIMIT_WINDOW_SEC=60
 export RAG_RATE_LIMIT_MAX_REQUESTS=30
-.venv/bin/uvicorn api:app --reload --port 8000
+.venv/bin/python manage.py runserver 8000
+```
+
+Alternative ASGI launch (uvicorn):
+
+```bash
+.venv/bin/uvicorn backend.asgi:application --reload --port 8000
 ```
 
 Core endpoints:
@@ -299,6 +302,13 @@ Core endpoints:
 - `POST /rag/answer` - canonical grounded answer contract (recommended default).
 - `POST /rag/answer-lc` - experimental LangChain route with citation-safe fallback.
 - `POST /rag/answer-stream` - SSE token stream with final response event.
+
+OpenAPI docs:
+
+- `GET /openapi/schema/` - machine-readable OpenAPI schema (JSON).
+- `GET /openapi/swagger/` - Swagger UI interactive docs.
+- `GET /openapi/redoc/` - ReDoc API reference.
+- In Swagger UI, click `Authorize` and set `X-API-Key` to call protected `/rag/*` endpoints.
 
 Internal guardrails enabled on RAG endpoints:
 
@@ -370,7 +380,7 @@ For large libraries, keep the graph responsive with:
 9. In Ask Books, test `ollama` mode and verify answers include citations or valid fallback behavior.
 10. Open `RAG Metrics` page and verify last-10 charts/table populate after Ask Books responses.
 11. Open Relationship Graph and confirm node selection + actions work.
-12. Start FastAPI server and call `/health`.
+12. Start Django API server and call `/health`.
 13. Call `/rag/answer` with `X-API-Key` and verify citations + generation mode in JSON response.
 14. Send burst requests and verify rate-limit response (`429`) appears after threshold.
 15. Verify API responses do not expose local filesystem paths in citation/chunk payloads.
@@ -416,7 +426,7 @@ Direct service mode (no API server required):
   --output-dir output/eval
 ```
 
-API mode (requires FastAPI running and `RAG_API_KEY`):
+API mode (requires Django API running and `RAG_API_KEY`):
 
 ```bash
 export RAG_API_KEY="change-this-internal-key"
