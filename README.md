@@ -33,6 +33,22 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Project-local Hugging Face cache (recommended)
+
+Use this if you want downloaded models (embedders/rerankers) saved under
+`output/hf_cache` instead of `~/.cache/huggingface`.
+
+```bash
+cp .env.example .env
+# ensure these are present in .env
+# HF_HOME=/Users/longtran/Projects/EBooksSorter/output/hf_cache
+# HF_HUB_CACHE=/Users/longtran/Projects/EBooksSorter/output/hf_cache/hub
+
+set -a
+source .env
+set +a
+```
+
 ### 2) Build source records
 
 ```bash
@@ -128,6 +144,40 @@ Use in Ask Books:
 
 - reranker: enabled
 - fallback: enabled
+
+### Compare reranker models
+
+In `Ask Books (RAG)` sidebar:
+
+- turn on `Enable reranker`
+- pick model from `Reranker model preset`
+- keep `Reranker top-N` between `24` and `40` for quality-focused tests
+
+Recommended models to test:
+
+- `cross-encoder/ms-marco-MiniLM-L-12-v2` (better quality, moderate latency)
+- `BAAI/bge-reranker-base` (strong on technical content)
+- `BAAI/bge-reranker-large` (highest quality, slowest/heaviest)
+
+Optional warm-download command (avoids first-query model download delay):
+
+```bash
+set -a
+source .env
+set +a
+
+.venv/bin/python - <<'PY'
+from sentence_transformers import CrossEncoder
+for name in [
+    "cross-encoder/ms-marco-MiniLM-L-12-v2",
+    "BAAI/bge-reranker-base",
+    "BAAI/bge-reranker-large",
+]:
+    print(f"Downloading/loading {name} ...")
+    CrossEncoder(name)
+print("Done.")
+PY
+```
 
 ## API Smoke Test
 
