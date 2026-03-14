@@ -28,8 +28,8 @@ try:
 except ImportError:  # pragma: no cover - optional dependency in some test environments
     CrossEncoder = None  # type: ignore[assignment]
 
-from semantic_books.generation_service import create_generator, create_image_generator
-from semantic_books.rag_config import ImageGenerationConfig, LlamaCppConfig, OllamaConfig, RetrievalConfig
+from semantic_books.generation_service import create_generator
+from semantic_books.rag_config import LlamaCppConfig, OllamaConfig, RetrievalConfig
 
 
 @dataclass
@@ -68,33 +68,6 @@ class RagService:
         if not model_name:
             raise ValueError("Invalid model_info.json: model_name missing.")
         self.model = SentenceTransformer(model_name)
-        self.modalities_in_index = set(model_info.get("modalities", [])) or {
-            str(item.get("modality", "text")) for item in self.metadata
-        }
-        self.image_vectors: Optional[np.ndarray] = None
-        self.image_metadata: List[Dict[str, Any]] = []
-        self.image_model: Optional[Any] = None
-        image_vectors_path = index_dir / "image_vectors.npy"
-        image_metadata_path = index_dir / "image_metadata.json"
-        image_model_name = str(model_info.get("image_model_name", "") or "")
-        if image_vectors_path.exists() and image_metadata_path.exists():
-            try:
-                self.image_vectors = self._normalize_rows(np.load(image_vectors_path))
-                with image_metadata_path.open("r", encoding="utf-8") as handle:
-                    loaded = json.load(handle)
-                if isinstance(loaded, list):
-                    self.image_metadata = [dict(item) for item in loaded if isinstance(item, dict)]
-                if image_model_name:
-                    self.image_model = SentenceTransformer(image_model_name)
-            except Exception:
-                self.image_vectors = None
-                self.image_metadata = []
-                self.image_model = None
-        self._chunk_id_to_metadata_idx: Dict[str, int] = {}
-        for idx, item in enumerate(self.metadata):
-            chunk_id = str(item.get("chunk_id", "") or "").strip()
-            if chunk_id:
-                self._chunk_id_to_metadata_idx[chunk_id] = idx
         self._reranker: Optional[Any] = None
         self._reranker_name = ""
         self._lexical_docs = [Counter(self._tokenize(self._lexical_text(item))) for item in self.metadata]
@@ -106,18 +79,8 @@ class RagService:
         norms[norms == 0] = 1.0
         return vectors / norms
 
-    def _filter_indices(self, filters: RagFilters, modalities: Optional[Sequence[str]] = None) -> np.ndarray:
+    def _filter_indices(self, filters: RagFilters) -> np.ndarray:
         idxs = np.arange(len(self.metadata))
-        if modalities:
-            allowed_modalities = {str(item).strip().lower() for item in modalities if str(item).strip()}
-            idxs = np.array(
-                [
-                    idx
-                    for idx in idxs
-                    if str(self.metadata[idx].get("modality", "text")).strip().lower() in allowed_modalities
-                ],
-                dtype=int,
-            )
         if filters.categories:
             categories = set(filters.categories)
             idxs = np.array([idx for idx in idxs if self.metadata[idx].get("category") in categories], dtype=int)
@@ -171,39 +134,6 @@ class RagService:
             out[int(filtered_idxs[local_idx])] = float(score)
         return out
 
-    def _image_scores(self, query: str, query_image_path: str, modalities: Optional[Sequence[str]]) -> Dict[int, float]:
-        if self.image_vectors is None or not len(self.image_metadata):
-            return {}
-        if modalities:
-            allowed = {str(item).strip().lower() for item in modalities if str(item).strip()}
-            if "image" not in allowed:
-                return {}
-        model = self.image_model or self.model
-        query_vec = None
-        if query_image_path.strip() and Path(query_image_path).exists():
-            try:
-                from PIL import Image  # local import for optional dependency
-
-                image = Image.open(query_image_path).convert("RGB")
-                query_vec = model.encode([image], normalize_embeddings=True, convert_to_numpy=True)[0]
-            except Exception:
-                query_vec = None
-        if query_vec is None:
-            try:
-                query_vec = model.encode([query], normalize_embeddings=True, convert_to_numpy=True)[0]
-            except Exception:
-                return {}
-        sims = self.image_vectors @ query_vec
-        out: Dict[int, float] = {}
-        for image_idx, score in enumerate(sims):
-            item = self.image_metadata[image_idx]
-            chunk_id = str(item.get("chunk_id", "") or "")
-            metadata_idx = self._chunk_id_to_metadata_idx.get(chunk_id)
-            if metadata_idx is None:
-                continue
-            out[metadata_idx] = float(score)
-        return out
-
     @staticmethod
     def _normalize_dense_scores(dense_scores: Dict[int, float]) -> Dict[int, float]:
         if not dense_scores:
@@ -245,24 +175,21 @@ class RagService:
     def _fuse_scores(
         dense_scores: Dict[int, float],
         lexical_scores: Dict[int, float],
-        image_scores: Dict[int, float],
         dense_weight: float,
         lexical_weight: float,
-        image_weight: float,
         hybrid_enabled: bool,
     ) -> Dict[int, float]:
-        candidates = set(dense_scores.keys()) | set(image_scores.keys())
+        candidates = set(dense_scores.keys())
         if hybrid_enabled:
             candidates |= set(lexical_scores.keys())
         out: Dict[int, float] = {}
         for idx in candidates:
             dense = float(dense_scores.get(idx, 0.0))
             lexical = float(lexical_scores.get(idx, 0.0))
-            image = float(image_scores.get(idx, 0.0))
             if hybrid_enabled:
-                score = (dense_weight * dense) + (lexical_weight * lexical) + (image_weight * image)
+                score = (dense_weight * dense) + (lexical_weight * lexical)
             else:
-                score = dense + (image_weight * image)
+                score = dense
             out[int(idx)] = score
         return out
 
@@ -296,7 +223,7 @@ class RagService:
         pairs = []
         for idx, _score in limited:
             row = self.metadata[idx]
-            text_for_rank = str(row.get("chunk_text", "") or row.get("image_caption", "") or "")
+            text_for_rank = str(row.get("chunk_text", "") or "")
             pairs.append((query, text_for_rank))
         try:
             rerank_scores = reranker.predict(pairs)
@@ -323,26 +250,18 @@ class RagService:
             return []
         filters = filters or RagFilters()
         cfg = retrieval_config or RetrievalConfig(final_top_k=max(1, int(top_k)))
-        filtered_idxs = self._filter_indices(filters, modalities=cfg.modalities)
+        filtered_idxs = self._filter_indices(filters)
         if filtered_idxs.size == 0:
             return []
 
         dense_scores_raw = self._dense_scores(clean_query, filtered_idxs)
         dense_scores = self._normalize_dense_scores(dense_scores_raw)
         lexical_scores = self._lexical_scores(clean_query, filtered_idxs)
-        image_scores_raw = self._image_scores(
-            query=clean_query,
-            query_image_path=str(cfg.query_image_path or ""),
-            modalities=cfg.modalities,
-        )
-        image_scores = self._normalize_dense_scores(image_scores_raw)
         fused = self._fuse_scores(
             dense_scores=dense_scores,
             lexical_scores=lexical_scores,
-            image_scores=image_scores,
             dense_weight=float(cfg.dense_weight),
             lexical_weight=float(cfg.lexical_weight),
-            image_weight=float(cfg.image_weight),
             hybrid_enabled=bool(cfg.hybrid_enabled),
         )
 
@@ -356,7 +275,6 @@ class RagService:
         for row_idx, final_score, fused_score in reranked_rows:
             similarity = float(dense_scores_raw.get(row_idx, -1.0))
             dense_norm = float(dense_scores.get(row_idx, 0.0))
-            image_norm = float(image_scores.get(row_idx, 0.0))
             relevance_for_filter = float(fused_score) if bool(cfg.hybrid_enabled) else dense_norm
             if relevance_for_filter < float(filters.min_similarity):
                 continue
@@ -364,7 +282,6 @@ class RagService:
             item["similarity"] = round(similarity, 4)
             item["dense_score_norm"] = round(dense_norm, 4)
             item["lexical_score"] = round(float(lexical_scores.get(row_idx, 0.0)), 4)
-            item["image_score"] = round(image_norm, 4)
             item["fused_score"] = round(float(fused_score), 4)
             item["score"] = round(float(final_score), 4)
             item["relevance_score"] = round(relevance_for_filter, 4)
@@ -447,7 +364,6 @@ class RagService:
                     str(item.get("title", "") or ""),
                     str(item.get("section_label", "") or ""),
                     str(item.get("chunk_text", "") or ""),
-                    str(item.get("image_caption", "") or ""),
                 ]
             ).lower()
             if not text_blob:
@@ -510,12 +426,8 @@ class RagService:
                     "chunk_len": int(item.get("chunk_len", 0) or 0),
                     "section_label": str(item.get("section_label", item.get("source_type", "")) or ""),
                     "similarity": float(item.get("similarity", 0.0) or 0.0),
-                    "modality": str(item.get("modality", "text") or "text"),
-                    "image_path": str(item.get("image_path", "") or ""),
-                    "image_caption": str(item.get("image_caption", "") or ""),
-                    "page_num": int(item.get("page_num", 0) or 0),
                     "snippet": self._compact_sentence(
-                        str(item.get("chunk_text", "") or item.get("image_caption", "")),
+                        str(item.get("chunk_text", "")),
                         max_len=320,
                     ),
                 }
@@ -646,7 +558,6 @@ class RagService:
         on_token: Optional[Callable[[str], None]] = None,
         should_cancel: Optional[Callable[[], bool]] = None,
         allow_fallback: bool = True,
-        image_generation_config: Optional[ImageGenerationConfig] = None,
     ) -> Dict[str, Any]:
         total_started = time.perf_counter()
         if should_cancel is not None and should_cancel():
@@ -657,7 +568,6 @@ class RagService:
                 "citations": [],
                 "generation_mode": "deterministic",
                 "fallback_reason": "request_cancelled",
-                "generated_images": [],
                 "metrics": {
                     "total_ms": 0.0,
                     "retrieval_ms": 0.0,
@@ -685,7 +595,6 @@ class RagService:
                 "citations": [],
                 "generation_mode": "deterministic",
                 "fallback_reason": "",
-                "generated_images": [],
                 "metrics": {
                     "total_ms": total_ms,
                     "retrieval_ms": retrieval_ms,
@@ -714,7 +623,6 @@ class RagService:
         generation_mode = "deterministic"
         generation_cfg = llm_config or LlamaCppConfig()
         ollama_cfg = ollama_config or OllamaConfig()
-        image_cfg = image_generation_config or ImageGenerationConfig()
         generation_ms = 0.0
         prompt_chars = 0
         raw_generated_attempt = ""
@@ -806,21 +714,6 @@ class RagService:
                         fallback_reason = "Deterministic fallback disabled; no valid generated answer."
             else:
                 generated_answer = self._deterministic_answer(chunks, citations)
-        generated_images: List[Dict[str, Any]] = []
-        image_generation_error = ""
-        if bool(image_cfg.enabled):
-            image_generator = create_image_generator(image_cfg)
-            if image_generator is not None:
-                try:
-                    generated_images = image_generator.generate(
-                        prompt=f"{query.strip()} {str(image_cfg.prompt_suffix or '').strip()}".strip(),
-                    )
-                except Exception as exc:
-                    image_generation_error = f"Image generation failed: {exc}"
-                    generated_images = []
-            else:
-                provider = str(image_cfg.provider or "none").strip() or "none"
-                image_generation_error = f"Image generation provider is unavailable: {provider}"
         total_ms = round((time.perf_counter() - total_started) * 1000.0, 2)
         inline_citations = {cid for cid in re.findall(r"\[(C\d+)\]", generated_answer)}
         if inline_citations:
@@ -855,8 +748,6 @@ class RagService:
             "citations": citations,
             "generation_mode": generation_mode,
             "fallback_reason": fallback_reason,
-            "generated_images": generated_images,
-            "image_generation_error": image_generation_error,
             "metrics": {
                 "total_ms": total_ms,
                 "retrieval_ms": retrieval_ms,

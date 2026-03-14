@@ -1,6 +1,6 @@
 # EBooksSorter
 
-Local-first PDF/EPUB library explorer with grounded RAG Q&A, multimodal retrieval controls, and optional synthetic image generation.
+Local-first PDF/EPUB library explorer with grounded RAG Q&A and semantic chunk indexing.
 
 ## What This Project Does
 
@@ -13,14 +13,7 @@ Local-first PDF/EPUB library explorer with grounded RAG Q&A, multimodal retrieva
 - Runs a Streamlit dashboard (`dashboard.py`) for:
   - semantic search,
   - Ask Books grounded Q&A with citations,
-  - optional generated images (via SDAPI endpoint),
   - recommendation and graph views.
-
-## Important Current Behavior
-
-- **Source-image extraction from PDFs/EPUBs is disabled** in the index builder.
-- `build_semantic_index.py` no longer scans source documents to create `output/semantic_images`.
-- You can still generate synthetic images in answers using `image_generation` + SDAPI.
 
 ## Requirements
 
@@ -28,7 +21,6 @@ Local-first PDF/EPUB library explorer with grounded RAG Q&A, multimodal retrieva
 - Python 3.10+ (project currently runs with `.venv`)
 - Optional:
   - Ollama (for text generation backend)
-  - Stable Diffusion API-compatible server (Forge/A1111) for generated images
 
 ## Quick Start
 
@@ -105,7 +97,6 @@ pip install -r requirements.txt
 ### 5) Start API (optional but recommended for API mode)
 
 ```bash
-export RAG_MULTIMODAL_ENABLED=1
 export RAG_API_KEY="change-this-internal-key"
 .venv/bin/python manage.py runserver 0.0.0.0:8000 --noreload
 ```
@@ -131,36 +122,12 @@ Use in Ask Books:
 - base URL: `http://127.0.0.1:11434`
 - model: `granite3.3:8b`
 
-### Stable Diffusion API (synthetic image generation)
-
-Run a compatible SDAPI server (for example Forge) on `:7860`, then verify:
-
-```bash
-curl -s http://127.0.0.1:7860/sdapi/v1/sd-models
-```
-
-In Ask Books image output settings:
-
-- provider: `sdapi`
-- endpoint: `http://127.0.0.1:7860/sdapi/v1/txt2img`
-
 ## Ask Books: Recommended Settings
 
 ### Grounded text retrieval
 
-- modalities: `text` (or `text,image` if you already have image rows in your source data)
 - reranker: enabled
 - fallback: enabled
-
-### Synthetic image generation
-
-- enable `Generate synthetic images with answer`
-- provider `sdapi`
-- endpoint `http://127.0.0.1:7860/sdapi/v1/txt2img`
-- start with:
-  - width/height: `768`
-  - steps: `20-30`
-  - guidance scale: `7.0`
 
 ## API Smoke Test
 
@@ -169,24 +136,13 @@ curl -X POST "http://127.0.0.1:8000/rag/answer" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: ${RAG_API_KEY}" \
   -d '{
-    "query": "Explain a neural network and generate one diagram",
+    "query": "Explain a neural network using grounded citations",
     "top_k": 4,
     "max_citations": 3,
     "ollama": {
       "enabled": true,
       "base_url": "http://127.0.0.1:11434",
       "model": "granite3.3:8b"
-    },
-    "image_generation": {
-      "enabled": true,
-      "provider": "sdapi",
-      "endpoint_url": "http://127.0.0.1:7860/sdapi/v1/txt2img",
-      "num_images": 1,
-      "width": 768,
-      "height": 768,
-      "guidance_scale": 7.0,
-      "steps": 25,
-      "timeout_sec": 120
     }
   }'
 ```
@@ -195,21 +151,14 @@ curl -X POST "http://127.0.0.1:8000/rag/answer" \
 
 - `output/semantic_index/*.npy|*.json`
 - `output/semantic_index_chunks/*.npy|*.json`
-- `output/generated_images/*.png` (only when image generation is enabled and SDAPI is reachable)
 
 ## Troubleshooting
 
 - **`/rag/*` returns 401/503**: set `RAG_API_KEY` on server and send `X-API-Key` header.
-- **No generated images**:
-  - verify SDAPI is running on `:7860`,
-  - verify model is loaded in SD server,
-  - check `image_generation_error` in response payload.
 - **Slow first run**: embedding models download on first use.
 - **No chunk index**: rebuild with `--semantic-source output/semantic_chunks.jsonl`.
 
 ## Document Sync Notes
 
 - `RUNBOOK.md` and `DEPLOYMENT.md` are aligned with this README:
-  - index refresh remains `index_books.py` + `build_semantic_index.py`,
-  - source document image scanning is not part of current index build path,
-  - synthetic image generation requires an external SDAPI-compatible endpoint.
+  - index refresh remains `index_books.py` + `build_semantic_index.py`.

@@ -7,8 +7,7 @@ This guide deploys EBooksSorter with four containers:
 - `ollama` (local model runtime)
 - `nginx` (TLS reverse proxy)
 
-Note: synthetic image generation is supported via an external SDAPI-compatible service.
-This Compose stack does not include a Stable Diffusion server by default.
+This deployment is text-RAG focused and does not include image-generation services.
 
 ## 1) VM Sizing and Storage
 
@@ -78,7 +77,7 @@ What this validates:
 - TLS cert files are present
 - chunk index artifacts exist
 - `docker compose config` is valid
-- API image builds
+- API container builds
 
 ## 5) Bootstrap/Refresh Indexes
 
@@ -94,8 +93,7 @@ This script runs:
 2. semantic index build (`output/semantic_index`)
 3. chunk index build (`output/semantic_index_chunks`)
 
-Current behavior: chunk/book index builds do not scan source PDF/EPUB pages into
-`output/semantic_images`; they index text/chunk records provided by semantic source JSONL.
+Current behavior: chunk/book index builds index text/chunk records provided by semantic source JSONL.
 
 ## 6) Start Production Stack
 

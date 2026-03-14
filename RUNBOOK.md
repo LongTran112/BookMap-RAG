@@ -58,9 +58,8 @@ Verification:
 
 Notes:
 
-- Current index build does **not** scan PDF/EPUB source pages into `output/semantic_images`.
-- Synthetic image generation in responses depends on an external SDAPI-compatible endpoint
-  configured at request/UI time (for example `http://127.0.0.1:7860/sdapi/v1/txt2img`).
+- Index build is text-chunk based (`semantic_source.jsonl` and `semantic_chunks.jsonl`).
+- Keep `output/semantic_index_chunks` refreshed whenever the corpus changes.
 
 ## Model Operations (Ollama)
 

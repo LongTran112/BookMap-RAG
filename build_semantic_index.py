@@ -11,10 +11,6 @@ from typing import Any, Dict, List, Sequence
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
-try:
-    from PIL import Image
-except ImportError:  # pragma: no cover - optional at runtime
-    Image = None  # type: ignore[assignment]
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -41,28 +37,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=int,
         default=32,
         help="Embedding batch size.",
-    )
-    parser.add_argument(
-        "--enable-multimodal",
-        action="store_true",
-        help="Enable multimodal image-index artifacts (keeps text vectors compatibility).",
-    )
-    parser.add_argument(
-        "--multimodal-model",
-        default="nomic-ai/nomic-embed-multimodal-3b",
-        help="Multimodal image embedding model identifier.",
-    )
-    parser.add_argument(
-        "--batch-size-image",
-        type=int,
-        default=4,
-        help="Image embedding batch size.",
-    )
-    parser.add_argument(
-        "--max-image-side",
-        type=int,
-        default=1024,
-        help="Maximum side length when loading images for multimodal embeddings.",
     )
     return parser.parse_args(argv)
 
@@ -117,62 +91,9 @@ def build_embedding_text(record: Dict[str, Any]) -> str:
     return "\n".join(part for part in parts if part.strip())
 
 
-def _ensure_v2_defaults(record: Dict[str, Any]) -> Dict[str, Any]:
-    out = dict(record)
-    out.setdefault("modality", "text")
-    out.setdefault("image_path", "")
-    out.setdefault("image_caption", "")
-    out.setdefault("page_num", 0)
-    return out
-
-
-def _load_image(path: Path, max_image_side: int) -> Any:
-    if Image is None:
-        raise RuntimeError("Pillow is required for multimodal image indexing.")
-    image = Image.open(path).convert("RGB")
-    if max(image.size) > max(64, int(max_image_side)):
-        image.thumbnail((int(max_image_side), int(max_image_side)))
-    return image
-
-
-def _encode_image_rows(
-    rows: Sequence[Dict[str, Any]],
-    model_name: str,
-    batch_size: int,
-    max_image_side: int,
-) -> np.ndarray:
-    model = SentenceTransformer(model_name)
-    images: List[Any] = []
-    for row in rows:
-        image_path = Path(str(row.get("image_path", "") or ""))
-        if image_path.exists():
-            images.append(_load_image(image_path, max_image_side=max_image_side))
-        else:
-            images.append(Image.new("RGB", (64, 64), color="white") if Image is not None else None)
-    try:
-        vectors = model.encode(
-            images,
-            batch_size=max(1, batch_size),
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-            show_progress_bar=True,
-        )
-    except Exception:
-        # Fallback: embed image captions as text when image encoder is unavailable.
-        fallback_texts = [build_embedding_text(row) for row in rows]
-        vectors = model.encode(
-            fallback_texts,
-            batch_size=max(1, batch_size),
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-            show_progress_bar=True,
-        )
-    return np.asarray(vectors, dtype=np.float32)
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    rows = [_ensure_v2_defaults(item) for item in load_records(args.semantic_source)]
+    rows = load_records(args.semantic_source)
     if not rows:
         print("No semantic source rows found.")
         return 1
@@ -190,31 +111,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     np.save(args.output_dir / "vectors.npy", vectors)
-    image_rows = [row for row in rows if str(row.get("modality", "text")) == "image"]
-    image_vectors = None
-    if args.enable_multimodal and image_rows:
-        image_vectors = _encode_image_rows(
-            image_rows,
-            model_name=str(args.multimodal_model),
-            batch_size=int(args.batch_size_image),
-            max_image_side=int(args.max_image_side),
-        )
-        np.save(args.output_dir / "image_vectors.npy", image_vectors)
-        with (args.output_dir / "image_metadata.json").open("w", encoding="utf-8") as handle:
-            json.dump(image_rows, handle, ensure_ascii=False, indent=2)
     with (args.output_dir / "metadata.json").open("w", encoding="utf-8") as handle:
         json.dump(rows, handle, ensure_ascii=False, indent=2)
     with (args.output_dir / "model_info.json").open("w", encoding="utf-8") as handle:
         json.dump(
             {
-                "schema_version": "v2",
                 "model_name": args.model,
-                "text_model_name": args.model,
-                "image_model_name": (args.multimodal_model if args.enable_multimodal else ""),
                 "num_items": len(rows),
-                "num_image_items": len(image_rows),
-                "has_image_vectors": bool(image_vectors is not None),
-                "modalities": sorted({str(row.get("modality", "text")) for row in rows}),
             },
             handle,
             indent=2,
@@ -223,8 +126,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     indexed_kind = "chunks" if rows and "chunk_text" in rows[0] else "books"
     print(f"Wrote semantic index to: {args.output_dir.resolve()}")
     print(f"Indexed {indexed_kind}: {len(rows)}")
-    if args.enable_multimodal:
-        print(f"Multimodal image items: {len(image_rows)}")
     return 0
 
 
