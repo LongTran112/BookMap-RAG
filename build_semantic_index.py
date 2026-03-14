@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -16,10 +15,6 @@ try:
     from PIL import Image
 except ImportError:  # pragma: no cover - optional at runtime
     Image = None  # type: ignore[assignment]
-try:
-    import pypdfium2
-except ImportError:  # pragma: no cover - optional at runtime
-    pypdfium2 = None  # type: ignore[assignment]
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -68,12 +63,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=int,
         default=1024,
         help="Maximum side length when loading images for multimodal embeddings.",
-    )
-    parser.add_argument(
-        "--image-cache-dir",
-        type=Path,
-        default=Path("./output/semantic_images"),
-        help="Directory for extracted PDF preview images used by multimodal indexing.",
     )
     return parser.parse_args(argv)
 
@@ -137,64 +126,6 @@ def _ensure_v2_defaults(record: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _render_pdf_preview(pdf_path: Path, output_path: Path, max_image_side: int) -> bool:
-    if pypdfium2 is None or Image is None:
-        return False
-    try:
-        doc = pypdfium2.PdfDocument(str(pdf_path))
-        page = doc[0]
-        bitmap = page.render(scale=2.0).to_pil()
-        if max(bitmap.size) > max(64, int(max_image_side)):
-            bitmap.thumbnail((int(max_image_side), int(max_image_side)))
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        bitmap.save(output_path)
-        return True
-    except Exception:
-        return False
-
-
-def _build_preview_image_rows(rows: Sequence[Dict[str, Any]], image_cache_dir: Path, max_image_side: int) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    seen_books = set()
-    for row in rows:
-        book_id = str(row.get("book_id", "") or "")
-        if not book_id or book_id in seen_books:
-            continue
-        seen_books.add(book_id)
-        abs_path = Path(str(row.get("absolute_path", "") or ""))
-        if abs_path.suffix.lower() != ".pdf" or not abs_path.exists():
-            continue
-        digest = hashlib.sha1(str(abs_path).encode("utf-8")).hexdigest()[:16]
-        image_path = image_cache_dir / f"{book_id}_{digest}_p1.png"
-        if not image_path.exists():
-            ok = _render_pdf_preview(abs_path, image_path, max_image_side=max_image_side)
-            if not ok:
-                continue
-        out.append(
-            {
-                "chunk_id": f"img_{book_id}_{digest}",
-                "book_id": book_id,
-                "title": str(row.get("title", "") or ""),
-                "category": str(row.get("category", "Other") or "Other"),
-                "learning_mode": str(row.get("learning_mode", "unknown") or "unknown"),
-                "absolute_path": str(abs_path),
-                "source_type": "page_image",
-                "source_index": 0,
-                "start_char": 0,
-                "end_char": 0,
-                "chunk_order": 0,
-                "chunk_len": 0,
-                "section_label": "page_image",
-                "chunk_text": "",
-                "modality": "image",
-                "image_path": str(image_path),
-                "image_caption": f"Page preview image for {str(row.get('title', '') or 'Untitled')}",
-                "page_num": 1,
-            }
-        )
-    return out
-
-
 def _load_image(path: Path, max_image_side: int) -> Any:
     if Image is None:
         raise RuntimeError("Pillow is required for multimodal image indexing.")
@@ -242,14 +173,6 @@ def _encode_image_rows(
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     rows = [_ensure_v2_defaults(item) for item in load_records(args.semantic_source)]
-    if args.enable_multimodal:
-        preview_rows = _build_preview_image_rows(
-            rows,
-            image_cache_dir=args.image_cache_dir,
-            max_image_side=int(args.max_image_side),
-        )
-        if preview_rows:
-            rows = rows + preview_rows
     if not rows:
         print("No semantic source rows found.")
         return 1
