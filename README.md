@@ -1,8 +1,8 @@
-# EBooksSorter
-
-[![Demo Preview](./assets/demo-preview.gif)](./assets/demo.mp4)
+# BookMap RAG
 
 Local-first PDF/EPUB library explorer with grounded RAG Q&A and semantic chunk indexing.
+[![Demo Preview](./assets/demo-preview.gif)](./assets/demo.mp4)
+
 
 ## What This Project Does
 
