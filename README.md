@@ -12,7 +12,7 @@ Local-first PDF/EPUB library explorer with grounded RAG Q&A and semantic chunk i
   - `output/semantic_chunks.jsonl`
   - `output/semantic_index/`
   - `output/semantic_index_chunks/`
-- Runs a Streamlit dashboard (`dashboard.py`) for:
+- Runs a Streamlit dashboard (`front-end/streamlit/dashboard.py`) for:
   - semantic search,
   - Ask Books grounded Q&A with citations,
   - recommendation and graph views.
@@ -122,8 +122,18 @@ export RAG_API_KEY="change-this-internal-key"
 ### 6) Start Streamlit dashboard
 
 ```bash
-.venv/bin/streamlit run dashboard.py
+.venv/bin/streamlit run front-end/streamlit/dashboard.py
 ```
+
+### 7) Start Gradio dashboard (alternative UI)
+
+Same data and indexes as Streamlit; default URL [http://127.0.0.1:7860](http://127.0.0.1:7860).
+
+```bash
+.venv/bin/python front-end-gradio/app.py
+```
+
+With Docker Compose, the Gradio service is exposed on host port **8502** (`dashboard-gradio`).
 
 ## Optional Backends
 
