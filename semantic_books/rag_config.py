@@ -17,6 +17,9 @@ class RetrievalConfig:
     reranker_enabled: bool = True
     reranker_model_name: Optional[str] = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_top_n: int = 32
+    # Okapi BM25 tuning (lexical leg of hybrid retrieval).
+    bm25_k1: float = 1.5  # term-frequency saturation; higher = more weight on repeated terms
+    bm25_b: float = 0.75  # document-length normalization; 0 = ignore length, 1 = full normalize
 
 
 @dataclass

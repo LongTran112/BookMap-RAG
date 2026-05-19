@@ -131,6 +131,28 @@ class RagServiceTests(unittest.TestCase):
             self.assertIn("factoid query had weak grounding", response["fallback_reason"].lower())
 
     @patch("semantic_books.rag_service.SentenceTransformer", return_value=_FakeModel())
+    def test_bm25_lexical_ranks_exact_keyword_match(self, _mock_model) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            index_dir = _write_chunk_index(Path(tmp_dir))
+            service = RagService(index_dir)
+            chunks = service.retrieve_chunks(
+                query="linux shell practical workflow",
+                filters=RagFilters(),
+                top_k=2,
+                retrieval_config=RetrievalConfig(
+                    hybrid_enabled=True,
+                    dense_weight=0.0,
+                    lexical_weight=1.0,
+                    candidate_pool_size=10,
+                    final_top_k=2,
+                    reranker_enabled=False,
+                ),
+            )
+            self.assertTrue(chunks)
+            self.assertEqual(chunks[0]["book_id"], "b2")
+            self.assertGreater(chunks[0]["lexical_score"], 0.0)
+
+    @patch("semantic_books.rag_service.SentenceTransformer", return_value=_FakeModel())
     def test_hybrid_retrieval_includes_lexical_signals(self, _mock_model) -> None:
         with TemporaryDirectory() as tmp_dir:
             index_dir = _write_chunk_index(Path(tmp_dir))

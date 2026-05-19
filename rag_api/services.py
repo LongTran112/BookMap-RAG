@@ -44,6 +44,8 @@ def build_retrieval(payload: Dict[str, Any], top_k: int) -> RetrievalConfig:
         reranker_enabled=bool(payload.get("reranker_enabled", True)),
         reranker_model_name=(clean_name or None),
         reranker_top_n=int(payload.get("reranker_top_n", 32)),
+        bm25_k1=float(payload.get("bm25_k1", 1.5)),
+        bm25_b=float(payload.get("bm25_b", 0.75)),
     )
 
 
