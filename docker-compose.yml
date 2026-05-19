@@ -94,6 +94,46 @@ services:
         max-size: "10m"
         max-file: "5"
 
+  dashboard-gradio:
+    image: ebooksorter-app:latest
+    container_name: ebooksorter-dashboard-gradio
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      RAG_API_KEY: ${RAG_API_KEY}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      TZ: ${TZ:-UTC}
+    command:
+      - python
+      - front-end-gradio/app.py
+    volumes:
+      - ./output:/app/output
+      - ./current-read-books:/app/current-read-books
+      - ./categories.yaml:/app/categories.yaml:ro
+    depends_on:
+      - api
+    ports:
+      - "8502:7860"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/', timeout=5).read()\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
   ollama:
     image: ollama/ollama:latest
     container_name: ebooksorter-ollama
