@@ -43,8 +43,8 @@ Use this if you want downloaded models (embedders/rerankers) saved under
 ```bash
 cp .env.example .env
 # ensure these are present in .env
-# HF_HOME=/Users/longtran/Projects/EBooksSorter/output/hf_cache
-# HF_HUB_CACHE=/Users/longtran/Projects/EBooksSorter/output/hf_cache/hub
+# HF_HOME=/path/to/EBooksSorter/output/hf_cache
+# HF_HUB_CACHE=/path/to/EBooksSorter/output/hf_cache/hub
 
 set -a
 source .env
@@ -56,7 +56,7 @@ set +a
 ```bash
 .venv/bin/python index_books.py \
   --config "./categories.yaml" \
-  --source "/Users/longtran/Documents/E-Books" \
+  --source "/path/to/your/E-Books" \
   --output-dir "./output"
 ```
 
