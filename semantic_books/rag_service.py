@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import resource
 import re
@@ -30,6 +31,8 @@ except ImportError:  # pragma: no cover - optional dependency in some test envir
 
 from semantic_books.generation_service import create_generator
 from semantic_books.rag_config import LlamaCppConfig, OllamaConfig, RetrievalConfig
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -107,7 +110,9 @@ class RagService:
 
     @staticmethod
     def _tokenize(text: str) -> List[str]:
-        return [tok for tok in re.findall(r"[a-z0-9]+", text.lower()) if len(tok) > 1]
+        # Keep trailing +/# so technical terms like "c++", "f#" survive
+        # tokenization; slash/hyphen-joined terms (tcp/ip) split into parts.
+        return [tok for tok in re.findall(r"[a-z0-9]+[+#]*", text.lower()) if len(tok) > 1]
 
     @staticmethod
     def _lexical_text(item: Dict[str, Any]) -> str:
@@ -259,6 +264,11 @@ class RagService:
             self._reranker_name = clean_name
             return self._reranker
         except Exception:
+            logger.warning(
+                "Failed to load reranker %r; falling back to fused scores.",
+                clean_name,
+                exc_info=True,
+            )
             self._reranker = None
             self._reranker_name = ""
             return None
@@ -283,6 +293,11 @@ class RagService:
         try:
             rerank_scores = reranker.predict(pairs)
         except Exception:
+            logger.warning(
+                "Reranker predict() failed for %d candidates; falling back to fused scores.",
+                len(pairs),
+                exc_info=True,
+            )
             return [(idx, score, score) for idx, score in scored_rows]
 
         reranked = []
