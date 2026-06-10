@@ -7,7 +7,6 @@ from datetime import date
 from datetime import datetime, timezone
 import html
 import os
-<<<<<<< HEAD
 import platform
 import re
 import shutil
@@ -16,9 +15,6 @@ import sys
 import urllib.error
 import urllib.request
 import webbrowser
-=======
-import sys
->>>>>>> origin/development
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -34,20 +30,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Ensure local project packages resolve when running from nested app folder.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-# Ensure local project packages resolve when running from nested app folder.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from semantic_books.learning_mode import learning_mode_labels
 from semantic_books.daily_recommend import DailyBookRecommender, DailyRecommendationWeights
-from semantic_books.rag_config import LlamaCppConfig, OllamaConfig, RetrievalConfig
-from semantic_books.rag_service import RagFilters, RagService
+from semantic_books.rag_service import RagService
+from semantic_books.rag_tab import build_rag_params_from_ui, run_rag_turn
 from semantic_books.search_service import SearchFilters, SemanticSearchService
 from semantic_books.bookmap_ui_core import (
     NOTEBOOKLM_URL,
@@ -65,9 +51,7 @@ from semantic_books.bookmap_ui_core import (
     blend_results_to_surface_epubs,
     build_book_summary,
     build_cover_thumbnail as core_build_cover_thumbnail,
-    build_rag_answer_payload,
     build_relationship_figure,
-    call_rag_api_answer,
     card_title as _card_title,
     coerce_progress,
     collect_recent_rag_metrics,
@@ -1265,138 +1249,76 @@ def render_ask_books_rag_page(
             stream_status_placeholder = st.empty()
             stream_status_placeholder.caption("Generating answer...")
 
-    effective_top_k_chunks = int(top_k_chunks)
-    effective_max_citations = int(max_citations)
-    effective_min_similarity = float(min_similarity)
-    effective_candidate_pool_size = int(candidate_pool_size)
-    effective_generation_mode = str(generation_mode)
-    effective_ollama_model = str(ollama_model)
-    effective_ollama_num_ctx = int(ollama_num_ctx)
-    effective_ollama_temp = float(ollama_temp)
-    effective_ollama_top_p = float(ollama_top_p)
-    effective_ollama_timeout_sec = int(ollama_timeout_sec)
-    effective_reranker_enabled = bool(reranker_enabled)
-    effective_reranker_top_n = int(reranker_top_n)
-
-    if bool(st.session_state.get("rag-auto-profile-enabled", False)):
-        auto_profile = select_rag_auto_profile(query)
-        profile = RAG_PERFORMANCE_PROFILES.get(auto_profile, {})
-        effective_top_k_chunks = int(profile.get("top_k_chunks", effective_top_k_chunks))
-        effective_max_citations = int(profile.get("max_citations", effective_max_citations))
-        effective_min_similarity = float(profile.get("min_similarity", effective_min_similarity))
-        effective_candidate_pool_size = int(profile.get("candidate_pool_size", effective_candidate_pool_size))
-        effective_generation_mode = str(profile.get("generation_mode", effective_generation_mode))
-        effective_ollama_model = str(profile.get("ollama_model", effective_ollama_model))
-        effective_ollama_num_ctx = int(profile.get("ollama_num_ctx", effective_ollama_num_ctx))
-        effective_ollama_temp = float(profile.get("ollama_temp", effective_ollama_temp))
-        effective_ollama_top_p = float(profile.get("ollama_top_p", effective_ollama_top_p))
-        effective_ollama_timeout_sec = int(profile.get("ollama_timeout_sec", effective_ollama_timeout_sec))
-        effective_reranker_enabled = bool(profile.get("reranker_enabled", effective_reranker_enabled))
-        effective_reranker_top_n = int(profile.get("reranker_top_n", effective_reranker_top_n))
-        st.sidebar.caption(f"Auto profile selected: {auto_profile}")
-
-    payload = build_rag_answer_payload(
+    base_params: Dict[str, Any] = {
+        "top_k_chunks": int(top_k_chunks),
+        "max_citations": int(max_citations),
+        "min_similarity": float(min_similarity),
+        "use_hybrid": bool(use_hybrid),
+        "dense_weight": float(dense_weight),
+        "lexical_weight": float(lexical_weight),
+        "candidate_pool_size": int(candidate_pool_size),
+        "reranker_enabled": bool(reranker_enabled),
+        "reranker_model": str(reranker_model),
+        "reranker_top_n": int(reranker_top_n),
+        "generation_mode": str(generation_mode),
+        "llama_model_path": str(llama_model_path),
+        "llama_n_ctx": int(llama_n_ctx),
+        "llama_max_tokens": int(llama_max_tokens),
+        "llama_temp": float(llama_temp),
+        "llama_top_p": float(llama_top_p),
+        "llama_threads": int(llama_threads),
+        "llama_gpu_layers": int(llama_gpu_layers),
+        "ollama_base_url": str(ollama_base_url),
+        "ollama_model": str(ollama_model),
+        "ollama_temp": float(ollama_temp),
+        "ollama_top_p": float(ollama_top_p),
+        "ollama_num_ctx": int(ollama_num_ctx),
+        "ollama_timeout_sec": int(ollama_timeout_sec),
+    }
+    auto_profile_enabled = bool(st.session_state.get("rag-auto-profile-enabled", False))
+    params = build_rag_params_from_ui(
         query=query,
-        top_k_chunks=effective_top_k_chunks,
-        max_citations=effective_max_citations,
-        selected_categories=selected_categories,
-        selected_modes=selected_modes,
-        min_similarity=effective_min_similarity,
-        use_hybrid=bool(use_hybrid),
-        dense_weight=float(dense_weight),
-        lexical_weight=float(lexical_weight),
-        candidate_pool_size=effective_candidate_pool_size,
-        reranker_enabled=effective_reranker_enabled,
-        reranker_model=str(reranker_model),
-        reranker_top_n=effective_reranker_top_n,
-        generation_mode=effective_generation_mode,
-        llama_model_path=str(llama_model_path),
-        llama_n_ctx=int(llama_n_ctx),
-        llama_max_tokens=int(llama_max_tokens),
-        llama_temp=float(llama_temp),
-        llama_top_p=float(llama_top_p),
-        llama_threads=int(llama_threads),
-        llama_gpu_layers=int(llama_gpu_layers),
-        ollama_base_url=str(ollama_base_url),
-        ollama_model=effective_ollama_model,
-        ollama_temp=effective_ollama_temp,
-        ollama_top_p=effective_ollama_top_p,
-        ollama_num_ctx=effective_ollama_num_ctx,
-        ollama_timeout_sec=effective_ollama_timeout_sec,
-        allow_fallback=not disable_fallback,
+        retrieval_preset_name="Custom",  # presets are applied to sliders via session state
+        perf_mode="Auto" if auto_profile_enabled else "Off",
+        base=base_params,
     )
+    if auto_profile_enabled:
+        st.sidebar.caption(f"Auto profile selected: {select_rag_auto_profile(query)}")
 
     with st.spinner("Generating grounded answer..."):
         streamed_text = ""
+        streaming_mode = str(params["generation_mode"]) == "ollama"
+        if not streaming_mode:
+            stream_status_placeholder.caption("Generating grounded answer...")
+
+        def _on_token(token: str) -> None:
+            nonlocal streamed_text
+            streamed_text += str(token)
+            _render_answer_with_blur(
+                streamed_text,
+                placeholder=stream_placeholder,
+                show_cursor=True,
+                hide_meta_text=blur_meta_text,
+            )
+            stream_status_placeholder.caption("Generating answer...")
+
         try:
-            if execution_mode == "API (/rag/answer)":
-                response = call_rag_api_answer(
-                    api_url=str(api_answer_url).strip(),
-                    payload=payload,
-                    timeout_sec=int(api_timeout_sec),
-                    api_key=str(api_key),
-                )
-            else:
-                filters = RagFilters(
-                    categories=selected_categories or None,
-                    learning_modes=selected_modes or None,
-                    min_similarity=effective_min_similarity,
-                )
-                retrieval_config = RetrievalConfig(
-                    hybrid_enabled=bool(use_hybrid),
-                    dense_weight=float(dense_weight),
-                    lexical_weight=float(lexical_weight),
-                    candidate_pool_size=effective_candidate_pool_size,
-                    final_top_k=effective_top_k_chunks,
-                    reranker_enabled=effective_reranker_enabled,
-                    reranker_model_name=str(reranker_model).strip() if effective_reranker_enabled else None,
-                    reranker_top_n=effective_reranker_top_n,
-                )
-                llm_config = LlamaCppConfig(
-                    enabled=effective_generation_mode == "llama.cpp",
-                    model_path=str(llama_model_path).strip(),
-                    n_ctx=int(llama_n_ctx),
-                    max_tokens=int(llama_max_tokens),
-                    temperature=float(llama_temp),
-                    top_p=float(llama_top_p),
-                    n_threads=int(llama_threads),
-                    n_gpu_layers=int(llama_gpu_layers),
-                )
-                ollama_config = OllamaConfig(
-                    enabled=effective_generation_mode == "ollama",
-                    base_url=str(ollama_base_url).strip(),
-                    model=effective_ollama_model.strip(),
-                    temperature=effective_ollama_temp,
-                    top_p=effective_ollama_top_p,
-                    num_ctx=effective_ollama_num_ctx,
-                    timeout_sec=effective_ollama_timeout_sec,
-                )
-                if effective_generation_mode != "ollama":
-                    stream_status_placeholder.caption("Generating grounded answer...")
-
-                def _on_token(token: str) -> None:
-                    nonlocal streamed_text
-                    streamed_text += str(token)
-                    if effective_generation_mode == "ollama":
-                        _render_answer_with_blur(
-                            streamed_text,
-                            placeholder=stream_placeholder,
-                            show_cursor=True,
-                            hide_meta_text=blur_meta_text,
-                        )
-                        stream_status_placeholder.caption("Generating answer...")
-
-                response = rag_service.answer_question(
-                    query=query,
-                    filters=filters,
-                    top_k=effective_top_k_chunks,
-                    max_citations=effective_max_citations,
-                    retrieval_config=retrieval_config,
-                    llm_config=llm_config,
-                    ollama_config=ollama_config,
-                    on_token=_on_token if effective_generation_mode == "ollama" else None,
-                    allow_fallback=not disable_fallback,
-                )
+            response, _ = run_rag_turn(
+                query=query,
+                rag=rag_service,
+                exec_api=execution_mode == "API (/rag/answer)",
+                api_url=str(api_answer_url).strip(),
+                api_timeout=int(api_timeout_sec),
+                api_key=str(api_key),
+                selected_categories=selected_categories,
+                selected_modes=selected_modes,
+                show_debug=show_debug,
+                blur_meta=blur_meta_text,
+                show_fallback=show_fallback_notice,
+                disable_fallback=disable_fallback,
+                params=params,
+                on_token=_on_token if streaming_mode else None,
+            )
         except Exception as exc:
             st.error(f"Could not generate answer: {exc}")
             return

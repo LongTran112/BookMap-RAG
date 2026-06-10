@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import resource
 import re
 import sys
 import time
 from collections import Counter
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 import numpy as np
 try:
@@ -28,15 +28,14 @@ try:
 except ImportError:  # pragma: no cover - optional dependency in some test environments
     CrossEncoder = None  # type: ignore[assignment]
 
+from semantic_books.filters import BookFilters
 from semantic_books.generation_service import create_generator
 from semantic_books.rag_config import LlamaCppConfig, OllamaConfig, RetrievalConfig
 
+logger = logging.getLogger(__name__)
 
-@dataclass
-class RagFilters:
-    categories: Optional[Sequence[str]] = None
-    learning_modes: Optional[Sequence[str]] = None
-    min_similarity: float = -1.0
+# Public name kept for callers/tests; same type as search_service.SearchFilters.
+RagFilters = BookFilters
 
 
 class RagService:
@@ -107,7 +106,9 @@ class RagService:
 
     @staticmethod
     def _tokenize(text: str) -> List[str]:
-        return [tok for tok in re.findall(r"[a-z0-9]+", text.lower()) if len(tok) > 1]
+        # Keep trailing +/# so technical terms like "c++", "f#" survive
+        # tokenization; slash/hyphen-joined terms (tcp/ip) split into parts.
+        return [tok for tok in re.findall(r"[a-z0-9]+[+#]*", text.lower()) if len(tok) > 1]
 
     @staticmethod
     def _lexical_text(item: Dict[str, Any]) -> str:
@@ -259,6 +260,11 @@ class RagService:
             self._reranker_name = clean_name
             return self._reranker
         except Exception:
+            logger.warning(
+                "Failed to load reranker %r; falling back to fused scores.",
+                clean_name,
+                exc_info=True,
+            )
             self._reranker = None
             self._reranker_name = ""
             return None
@@ -283,6 +289,11 @@ class RagService:
         try:
             rerank_scores = reranker.predict(pairs)
         except Exception:
+            logger.warning(
+                "Reranker predict() failed for %d candidates; falling back to fused scores.",
+                len(pairs),
+                exc_info=True,
+            )
             return [(idx, score, score) for idx, score in scored_rows]
 
         reranked = []
@@ -436,10 +447,14 @@ class RagService:
         return False
 
     @staticmethod
-    def _build_follow_ups(
+    def build_follow_ups(
         query: str = "",
         chunks: Optional[List[Dict[str, Any]]] = None,
     ) -> List[str]:
+        """Suggest follow-up prompts based on the query topic and cited categories.
+
+        Public API: used by rag_api views as well as internal answer assembly.
+        """
         topic = RagService._extract_query_topic(query)
         categories: List[str] = []
         for item in chunks or []:
@@ -540,7 +555,11 @@ class RagService:
         )
 
     @staticmethod
-    def _validate_generated_answer(text: str, known_citations: Set[str]) -> bool:
+    def validate_generated_answer(text: str, known_citations: Set[str]) -> bool:
+        """Check a generated answer is grounded in the known citation ids.
+
+        Public API: used by rag_api views to validate LangChain route output.
+        """
         if not text.strip():
             return False
         if RagService._looks_like_reasoning_leak(text):
@@ -676,7 +695,7 @@ class RagService:
             f"Grounded from {len(chunks)} retrieved chunks across {len(categories)} categories: "
             + ", ".join(categories[:4])
         )
-        follow_ups = self._build_follow_ups(query=query, chunks=chunks)
+        follow_ups = self.build_follow_ups(query=query, chunks=chunks)
 
         fallback_reason = ""
         generated_answer = ""
@@ -752,7 +771,7 @@ class RagService:
                 raw_generated_attempt = str(result.text or "").strip()
                 if result.error:
                     fallback_reason = str(result.error)
-                elif not self._validate_generated_answer(result.text, known_citations):
+                elif not self.validate_generated_answer(result.text, known_citations):
                     fallback_reason = "Generated answer missing valid citation markers."
                 else:
                     generated_answer = result.text.strip()

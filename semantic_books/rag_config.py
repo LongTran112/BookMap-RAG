@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+# Single source of truth for the default cross-encoder reranker.
+# Keep UI (bookmap_ui_core), API (rag_api.serializers), and direct service
+# usage aligned so the same query reranks identically on every path.
+DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-large"
+
 
 @dataclass
 class RetrievalConfig:
@@ -15,7 +20,7 @@ class RetrievalConfig:
     candidate_pool_size: int = 48
     final_top_k: int = 8
     reranker_enabled: bool = True
-    reranker_model_name: Optional[str] = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranker_model_name: Optional[str] = DEFAULT_RERANKER_MODEL
     reranker_top_n: int = 32
     # Okapi BM25 tuning (lexical leg of hybrid retrieval).
     bm25_k1: float = 1.5  # term-frequency saturation; higher = more weight on repeated terms

@@ -8,9 +8,22 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
+_DEV_SECRET_KEY = "dev-only-change-me"
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "").strip() or _DEV_SECRET_KEY
 DEBUG = os.getenv("DJANGO_DEBUG", "1").strip() not in {"0", "false", "False"}
-ALLOWED_HOSTS = [item.strip() for item in os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",") if item.strip()]
+ALLOWED_HOSTS = [
+    item.strip()
+    for item in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+    if item.strip()
+]
+if DEBUG and "testserver" not in ALLOWED_HOSTS:
+    # Django's test Client sends Host: testserver; only allow it in debug runs.
+    ALLOWED_HOSTS.append("testserver")
+
+if not DEBUG and SECRET_KEY == _DEV_SECRET_KEY:
+    raise RuntimeError(
+        "DJANGO_SECRET_KEY must be set to a strong random value when DJANGO_DEBUG=0."
+    )
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",

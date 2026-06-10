@@ -24,7 +24,7 @@ for _p in (PROJECT_ROOT, _GRADIO_DIR):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-import rag_tab  # noqa: E402
+from semantic_books import rag_tab  # noqa: E402
 
 from semantic_books.bookmap_ui_core import (  # noqa: E402
     BookmapPaths,

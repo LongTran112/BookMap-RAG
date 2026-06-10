@@ -36,8 +36,9 @@ try:
 except ImportError:  # pragma: no cover - optional runtime dependency
     epub = None
 
+from semantic_books.rag_config import DEFAULT_RERANKER_MODEL
+
 NOTEBOOKLM_URL = "https://notebooklm.google.com"
-DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-large"
 RAG_RETRIEVAL_PRESETS: Dict[str, Dict[str, Any]] = {
     "Definition Q&A": {
         "top_k_chunks": 4,

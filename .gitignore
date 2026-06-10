@@ -6,8 +6,19 @@ deploy/certs/
 deploy/logs/
 deploy/backups/
 deploy/nginx/htpasswd
-output/.~lock.*
-output/covers/
 current-read-books/
 
-output/hf_cache/
+# Generated artifacts (indexes, covers, recommendations, caches)
+output/
+output_config_test/
+db.sqlite3
+
+# Merge/mergetool leftovers
+*.orig
+*_BACKUP_*.json
+*_BASE_*.json
+*_LOCAL_*.json
+*_REMOTE_*.json
+
+# Raw media (keep demo.mp4 / demo-preview.gif tracked explicitly)
+assets/*.mov

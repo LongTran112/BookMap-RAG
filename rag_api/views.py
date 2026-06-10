@@ -235,7 +235,7 @@ class RagAnswerLangChainView(APIView):
             context = build_context_from_documents(docs, max_docs=max_citations)
             generated = str(chain.invoke({"query": query, "context": context}) or "").strip()
             known = {str(item.get("citation_id", "")) for item in citations if item.get("citation_id")}
-            if not rag_service._validate_generated_answer(generated, known):  # noqa: SLF001
+            if not rag_service.validate_generated_answer(generated, known):
                 fallback = rag_service.answer_question(
                     query=query,
                     filters=filters,
@@ -258,7 +258,7 @@ class RagAnswerLangChainView(APIView):
                 {
                     "answer": generated,
                     "summary": summary,
-                    "follow_ups": rag_service._build_follow_ups(query=query, chunks=citations),  # noqa: SLF001
+                    "follow_ups": rag_service.build_follow_ups(query=query, chunks=citations),
                     "citations": [redact_path_value(item) for item in citations],
                     "generation_mode": "langchain",
                     "fallback_reason": "",

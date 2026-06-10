@@ -1,3 +1,7 @@
+# Production image deps. Diff vs requirements.txt: llama-cpp-python is
+# intentionally excluded (needs a C++ toolchain; local llama.cpp generation
+# and the LangChain llama.cpp route are unavailable in containers — Ollama
+# is the supported generation backend in production).
 pypdf
 pyyaml
 numpy
