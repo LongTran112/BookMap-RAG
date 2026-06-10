@@ -81,12 +81,12 @@ class _FakeRagService:
             },
         }
 
-    def _build_follow_ups(self, *args, **kwargs):
+    def build_follow_ups(self, *args, **kwargs):
         _ = args
         _ = kwargs
         return ["Compare these sources by theoretical depth and practical exercises."]
 
-    def _validate_generated_answer(self, text, known_citations):
+    def validate_generated_answer(self, text, known_citations):
         inline = {"C1"} if "[C1]" in str(text) else set()
         return bool(inline) and inline.issubset(set(known_citations))
 

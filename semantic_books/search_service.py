@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set
+from typing import Any, Dict, List, Optional, Set
 
 import numpy as np
+
+from semantic_books.filters import BookFilters
+
 try:
     from sentence_transformers import SentenceTransformer
 except ImportError:  # pragma: no cover - optional dependency in test/runtime environments
@@ -19,11 +21,8 @@ except ImportError:  # pragma: no cover - optional dependency in test/runtime en
             )
 
 
-@dataclass
-class SearchFilters:
-    categories: Optional[Sequence[str]] = None
-    learning_modes: Optional[Sequence[str]] = None
-    min_similarity: float = -1.0
+# Public name kept for callers/tests; same type as rag_service.RagFilters.
+SearchFilters = BookFilters
 
 
 class SemanticSearchService:
