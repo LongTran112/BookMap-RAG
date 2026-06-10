@@ -3,6 +3,7 @@ pyyaml
 numpy
 sentence-transformers
 streamlit
+gradio>=4.44,<6
 pypdfium2
 Pillow
 ebooklib
