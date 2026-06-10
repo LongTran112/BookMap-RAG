@@ -1,8 +1,8 @@
-"""RAG chat + metrics helpers for Gradio (no Gradio imports)."""
+"""Framework-agnostic RAG chat orchestration shared by Streamlit and Gradio UIs."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from semantic_books.bookmap_ui_core import (
     RAG_PERFORMANCE_PROFILES,
@@ -83,6 +83,7 @@ def run_rag_turn(
     show_fallback: bool,
     disable_fallback: bool,
     params: Dict[str, Any],
+    on_token: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Dict[str, Any], str]:
     payload = build_rag_answer_payload(
         query=query,
@@ -159,7 +160,7 @@ def run_rag_turn(
             retrieval_config=retrieval_config,
             llm_config=llm_config,
             ollama_config=ollama_config,
-            on_token=None,
+            on_token=on_token,
             allow_fallback=not disable_fallback,
         )
     text = format_rag_turn_markdown(
