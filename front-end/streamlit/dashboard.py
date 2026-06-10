@@ -7,7 +7,18 @@ from datetime import date
 from datetime import datetime, timezone
 import html
 import os
+<<<<<<< HEAD
+import platform
+import re
+import shutil
+import subprocess
 import sys
+import urllib.error
+import urllib.request
+import webbrowser
+=======
+import sys
+>>>>>>> origin/development
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -17,6 +28,11 @@ try:
     import plotly.graph_objects as go
 except ImportError:  # pragma: no cover - optional runtime dependency
     go = None
+
+# Ensure local project packages resolve when running from nested app folder.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Ensure local project packages resolve when running from nested app folder.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
