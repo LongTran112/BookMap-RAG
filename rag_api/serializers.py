@@ -30,6 +30,8 @@ class RetrievalConfigSerializer(serializers.Serializer):
     reranker_enabled = serializers.BooleanField(required=False, default=True)
     reranker_model_name = serializers.CharField(required=False, allow_null=True, default="cross-encoder/ms-marco-MiniLM-L-6-v2")
     reranker_top_n = serializers.IntegerField(required=False, default=32, min_value=1)
+    bm25_k1 = serializers.FloatField(required=False, default=1.5, min_value=0.0)
+    bm25_b = serializers.FloatField(required=False, default=0.75, min_value=0.0, max_value=1.0)
 
 
 class LlamaCppConfigSerializer(serializers.Serializer):

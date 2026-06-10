@@ -70,8 +70,11 @@ class RagService:
         self.model = SentenceTransformer(model_name)
         self._reranker: Optional[Any] = None
         self._reranker_name = ""
+        # Lexical index for Okapi BM25 (hybrid retrieval leg).
         self._lexical_docs = [Counter(self._tokenize(self._lexical_text(item))) for item in self.metadata]
-        self._idf = self._build_idf(self._lexical_docs)
+        self._bm25_doc_lens = [float(sum(terms.values())) for terms in self._lexical_docs]
+        self._bm25_avgdl = sum(self._bm25_doc_lens) / max(1.0, float(len(self._bm25_doc_lens)))
+        self._bm25_idf = self._build_bm25_idf(self._lexical_docs)
 
     @staticmethod
     def _normalize_rows(vectors: np.ndarray) -> np.ndarray:
@@ -118,13 +121,25 @@ class RagService:
         )
 
     @staticmethod
-    def _build_idf(doc_terms: List[Counter[str]]) -> Dict[str, float]:
+    def _build_bm25_idf(doc_terms: List[Counter[str]]) -> Dict[str, float]:
+        """Precompute BM25 inverse document frequency for every corpus token.
+
+        Okapi BM25 IDF (Robertson–Walker variant, smoothed):
+
+            IDF(t) = log( (N - df(t) + 0.5) / (df(t) + 0.5) + 1 )
+
+        where N = total documents and df(t) = number of documents containing term t.
+        Rare terms get larger IDF; terms in every document are down-weighted.
+        """
         total_docs = max(1, len(doc_terms))
         doc_freq: Counter[str] = Counter()
         for terms in doc_terms:
             for token in terms.keys():
                 doc_freq[token] += 1
-        return {token: math.log(1.0 + (total_docs / (1.0 + freq))) for token, freq in doc_freq.items()}
+        return {
+            token: math.log(((total_docs - freq + 0.5) / (freq + 0.5)) + 1.0)
+            for token, freq in doc_freq.items()
+        }
 
     def _dense_scores(self, query: str, filtered_idxs: np.ndarray) -> Dict[int, float]:
         query_vec = self.model.encode([query], normalize_embeddings=True, convert_to_numpy=True)[0]
@@ -147,27 +162,67 @@ class RagService:
             return {idx: flat for idx in dense_scores}
         return {idx: (float(score) - min_v) / (max_v - min_v) for idx, score in dense_scores.items()}
 
-    def _lexical_scores(self, query: str, filtered_idxs: np.ndarray) -> Dict[int, float]:
+    def _bm25_term_score(
+        self,
+        term_freq: float,
+        doc_len: float,
+        idf: float,
+        k1: float,
+        b: float,
+    ) -> float:
+        """Score one query term against one document (Okapi BM25 term component).
+
+        BM25 combines IDF with a saturated term-frequency and length normalization:
+
+            score(t, d) = IDF(t) * [ f(t,d) * (k1 + 1) ]
+                          / [ f(t,d) + k1 * (1 - b + b * |d| / avgdl) ]
+
+        - f(t,d): raw term count in document d (from the chunk token Counter).
+        - |d| / avgdl: document length vs corpus average (reduces bias from long chunks).
+        - k1: caps how much repeated terms can boost the score (saturation).
+        - b: how strongly length normalization applies (0 = none, 1 = full).
+        """
+        if term_freq <= 0.0 or idf <= 0.0:
+            return 0.0
+        length_norm = 1.0 - b + (b * doc_len / self._bm25_avgdl)
+        numerator = term_freq * (k1 + 1.0)
+        denominator = term_freq + (k1 * length_norm)
+        return idf * (numerator / denominator)
+
+    def _lexical_scores(
+        self,
+        query: str,
+        filtered_idxs: np.ndarray,
+        k1: float = 1.5,
+        b: float = 0.75,
+    ) -> Dict[int, float]:
+        """BM25 lexical scores for candidate chunks, normalized to [0, 1] per query.
+
+        Full document score is the sum of per-term BM25 components over unique
+        query terms (standard Okapi BM25). Scores are max-normalized so they
+        fuse cleanly with dense similarity in _fuse_scores.
+        """
         q_tokens = self._tokenize(query)
         if not q_tokens:
             return {}
-        q_tf = Counter(q_tokens)
+        query_terms = set(q_tokens)
         out: Dict[int, float] = {}
         max_raw = 0.0
         for row_idx in filtered_idxs:
             idx = int(row_idx)
             doc_tf = self._lexical_docs[idx]
+            doc_len = self._bm25_doc_lens[idx]
             score = 0.0
-            for tok, q_count in q_tf.items():
+            for tok in query_terms:
                 tf = float(doc_tf.get(tok, 0))
-                if tf <= 0:
+                if tf <= 0.0:
                     continue
-                idf = float(self._idf.get(tok, 0.0))
-                score += (1.0 + math.log(tf)) * (1.0 + math.log(float(q_count))) * idf
-            if score > 0:
+                idf = float(self._bm25_idf.get(tok, 0.0))
+                score += self._bm25_term_score(tf, doc_len, idf, k1=k1, b=b)
+            if score > 0.0:
                 out[idx] = score
                 max_raw = max(max_raw, score)
-        if max_raw <= 0:
+        if max_raw <= 0.0:
             return {}
         return {idx: float(score / max_raw) for idx, score in out.items()}
 
@@ -256,7 +311,12 @@ class RagService:
 
         dense_scores_raw = self._dense_scores(clean_query, filtered_idxs)
         dense_scores = self._normalize_dense_scores(dense_scores_raw)
-        lexical_scores = self._lexical_scores(clean_query, filtered_idxs)
+        lexical_scores = self._lexical_scores(
+            clean_query,
+            filtered_idxs,
+            k1=float(cfg.bm25_k1),
+            b=float(cfg.bm25_b),
+        )
         fused = self._fuse_scores(
             dense_scores=dense_scores,
             lexical_scores=lexical_scores,

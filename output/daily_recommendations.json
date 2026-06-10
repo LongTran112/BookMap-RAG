@@ -891,6 +891,229 @@
           }
         }
       ]
+    },
+    "2026-04-21": {
+      "generated_at": "2026-04-21T23:41:32.754119+02:00",
+      "book_ids": [
+        "54336dd24ea0",
+        "2f5c4cf0df8a",
+        "4cd3c1ed4d23",
+        "f2ed6f2aa2dd",
+        "044bb9918f91",
+        "57a898238437",
+        "99965a1d484e",
+        "fb77cd477838",
+        "a17f0d21fc34",
+        "76fb55d1366d",
+        "959787f0b025",
+        "8dac868a0244",
+        "5e83ccd7a42f",
+        "369347ca7761",
+        "e5514961f271",
+        "d394fb7d1697",
+        "b5371c3c13dc",
+        "33bbda72bfa1"
+      ],
+      "books": [
+        {
+          "book_id": "54336dd24ea0",
+          "daily_score": 1.0485,
+          "strategy": "explore",
+          "reasons": {
+            "similarity": 0.1792,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 1.0
+          }
+        },
+        {
+          "book_id": "2f5c4cf0df8a",
+          "daily_score": 1.024,
+          "strategy": "explore",
+          "reasons": {
+            "similarity": 0.3882,
+            "freshness": 0.3333,
+            "novelty": 0.0,
+            "confidence": 0.438
+          }
+        },
+        {
+          "book_id": "4cd3c1ed4d23",
+          "daily_score": 0.7567,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 1.0,
+            "freshness": 0.5333,
+            "novelty": 0.0,
+            "confidence": 1.0
+          }
+        },
+        {
+          "book_id": "f2ed6f2aa2dd",
+          "daily_score": 0.7476,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.935,
+            "freshness": 0.6667,
+            "novelty": 0.0,
+            "confidence": 1.0
+          }
+        },
+        {
+          "book_id": "044bb9918f91",
+          "daily_score": 0.6891,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.4468,
+            "freshness": 0.9667,
+            "novelty": 1.0,
+            "confidence": 1.0
+          }
+        },
+        {
+          "book_id": "57a898238437",
+          "daily_score": 0.6571,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.5085,
+            "freshness": 0.8333,
+            "novelty": 1.0,
+            "confidence": 0.608
+          }
+        },
+        {
+          "book_id": "99965a1d484e",
+          "daily_score": 0.643,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.7789,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 0.646
+          }
+        },
+        {
+          "book_id": "fb77cd477838",
+          "daily_score": 0.6429,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.7235,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 0.95
+          }
+        },
+        {
+          "book_id": "a17f0d21fc34",
+          "daily_score": 0.5412,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.7756,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 0.646
+          }
+        },
+        {
+          "book_id": "76fb55d1366d",
+          "daily_score": 0.5326,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.6956,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 1.0
+          }
+        },
+        {
+          "book_id": "959787f0b025",
+          "daily_score": 0.5319,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.6943,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 1.0
+          }
+        },
+        {
+          "book_id": "8dac868a0244",
+          "daily_score": 0.4322,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.6956,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 0.996
+          }
+        },
+        {
+          "book_id": "5e83ccd7a42f",
+          "daily_score": 0.4317,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.694,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 1.0
+          }
+        },
+        {
+          "book_id": "369347ca7761",
+          "daily_score": 0.3322,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.6956,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 0.996
+          }
+        },
+        {
+          "book_id": "e5514961f271",
+          "daily_score": 0.3303,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.724,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 0.821
+          }
+        },
+        {
+          "book_id": "d394fb7d1697",
+          "daily_score": 0.2224,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.6771,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 1.0
+          }
+        },
+        {
+          "book_id": "b5371c3c13dc",
+          "daily_score": 0.2195,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.6717,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 1.0
+          }
+        },
+        {
+          "book_id": "33bbda72bfa1",
+          "daily_score": 0.1183,
+          "strategy": "exploit",
+          "reasons": {
+            "similarity": 0.6697,
+            "freshness": 0.0,
+            "novelty": 1.0,
+            "confidence": 1.0
+          }
+        }
+      ]
     }
   }
 }
